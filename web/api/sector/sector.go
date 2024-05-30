@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/filecoin-project/curio/deps"
-	"github.com/filecoin-project/curio/web/api/apihelper"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/filecoin-project/curio/deps"
+	"github.com/filecoin-project/curio/web/api/apihelper"
 
 	"github.com/docker/go-units"
 	"github.com/gorilla/mux"
@@ -44,6 +45,9 @@ func (c *cfg) terminateSectors(w http.ResponseWriter, r *http.Request) {
 		MinerID int
 		Sector  int
 	}
+
+	fmt.Printf("TERMINATE SECTOR TRIGGERED\n")
+
 	apihelper.OrHTTPFail(w, json.NewDecoder(r.Body).Decode(&in))
 	toDel := map[int][]int{}
 	for _, s := range in {
@@ -55,10 +59,13 @@ func (c *cfg) terminateSectors(w http.ResponseWriter, r *http.Request) {
 		apihelper.OrHTTPFail(w, err)
 		mi, err := c.Full.StateMinerInfo(r.Context(), maddr, types.EmptyTSK)
 		apihelper.OrHTTPFail(w, err)
+		fmt.Printf("TERMINATING SECTORS %d ON MINER %s\n", sectors, maddr.String())
 		_, err = spcli.TerminateSectors(r.Context(), c.Full, maddr, sectors, mi.Worker)
 		apihelper.OrHTTPFail(w, err)
+		fmt.Printf("TERMINATE MESSAGE SENT SUCCESSFULLY\n")
 		for _, sectorNumber := range sectors {
 			id := abi.SectorID{Miner: abi.ActorID(minerInt), Number: abi.SectorNumber(sectorNumber)}
+			fmt.Printf("TRIGERRING TEMOVAL FOR SECTOR %d ON MINER %s", sectorNumber, maddr.String())
 			apihelper.OrHTTPFail(w, c.Stor.Remove(r.Context(), id, storiface.FTAll, true, nil))
 		}
 	}
