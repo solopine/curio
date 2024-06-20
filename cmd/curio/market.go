@@ -93,7 +93,7 @@ var marketSealCmd = &cli.Command{
 		&cli.BoolFlag{
 			Name:  "synthetic",
 			Usage: "Use synthetic PoRep",
-			Value: false, // todo implement synthetic
+			Value: false,
 		},
 	},
 	Action: func(cctx *cli.Context) error {
@@ -151,7 +151,7 @@ var marketSealCmd = &cli.Command{
 					SELECT
 					    sector_number,
 						piece_size,
-						piece_index,
+						piece_index
 					FROM
 						open_sector_pieces
 					WHERE
