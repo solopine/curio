@@ -188,6 +188,27 @@ description: The default curio configuration
   # type: string
   #GuiAddress = "0.0.0.0:4701"
 
+  # Batch Seal
+  #
+  # type: bool
+  #EnableBatchSeal = false
+
+  # BatchSealSectorSize Allows setting the sector size supported by the batch seal task.
+  # Can be any value as long as it is "32GiB".
+  #
+  # type: string
+  #BatchSealSectorSize = "32GiB"
+
+  # Number of sectors in a seal batch. Depends on hardware and supraseal configuration.
+  #
+  # type: int
+  #BatchSealBatchSize = 32
+
+  # Number of parallel pipelines. Can be 1 or 2. Depends on available raw block storage
+  #
+  # type: int
+  #BatchSealPipelines = 2
+
 
 [Fees]
   # type: types.FIL
