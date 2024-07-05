@@ -234,6 +234,7 @@ func addSealingTasks(
 	}
 
 	var slotMgr *slotmgr.SlotMgr
+	var addFinalize bool
 
 	// NOTE: Tasks with the LEAST priority are at the top
 	if cfg.Subsystems.EnableBatchSeal {
@@ -244,6 +245,7 @@ func addSealingTasks(
 			return nil, xerrors.Errorf("setting up batch sealer: %w", err)
 		}
 		activeTasks = append(activeTasks, batchSealTask)
+		addFinalize = true
 	}
 
 	if cfg.Subsystems.EnableSealSDR {
@@ -253,9 +255,14 @@ func addSealingTasks(
 	if cfg.Subsystems.EnableSealSDRTrees {
 		treeDTask := seal.NewTreeDTask(sp, db, slr, cfg.Subsystems.SealSDRTreesMaxTasks)
 		treeRCTask := seal.NewTreeRCTask(sp, db, slr, cfg.Subsystems.SealSDRTreesMaxTasks)
-		finalizeTask := seal.NewFinalizeTask(cfg.Subsystems.FinalizeMaxTasks, sp, slr, db, slotMgr)
-		activeTasks = append(activeTasks, treeDTask, treeRCTask, finalizeTask)
+		activeTasks = append(activeTasks, treeDTask, treeRCTask)
+		addFinalize = true
 	}
+	if addFinalize {
+		finalizeTask := seal.NewFinalizeTask(cfg.Subsystems.FinalizeMaxTasks, sp, slr, db, slotMgr)
+		activeTasks = append(activeTasks, finalizeTask)
+	}
+
 	if cfg.Subsystems.EnableSendPrecommitMsg {
 		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg.Fees.MaxPreCommitGasFee, cfg.Fees.CollateralFromMinerBalance, cfg.Fees.DisableCollateralFallback)
 		activeTasks = append(activeTasks, precommitTask)
