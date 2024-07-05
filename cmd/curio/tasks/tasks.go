@@ -84,6 +84,7 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps) (*harmonytask.Task
 	lstor := dependencies.LocalStore
 	si := dependencies.Si
 	bstore := dependencies.Bstore
+	machine := dependencies.ListenAddr
 	var activeTasks []harmonytask.TaskInterface
 
 	sender, sendTask := message.NewSender(full, full, db)
@@ -172,7 +173,7 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps) (*harmonytask.Task
 		cfg.Subsystems.EnableSendCommitMsg ||
 		cfg.Subsystems.EnableBatchSeal
 	if hasAnySealingTask {
-		sealingTasks, err := addSealingTasks(ctx, hasAnySealingTask, db, full, sender, as, cfg, slrLazy, asyncParams, si, stor, bstore)
+		sealingTasks, err := addSealingTasks(ctx, hasAnySealingTask, db, full, sender, as, cfg, slrLazy, asyncParams, si, stor, bstore, machine)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +221,7 @@ func addSealingTasks(
 	ctx context.Context, hasAnySealingTask bool, db *harmonydb.DB, full api.FullNode, sender *message.Sender,
 	as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, slrLazy *lazy.Lazy[*ffi.SealCalls],
 	asyncParams func() func() (bool, error), si paths.SectorIndex, stor *paths.Remote,
-	bstore curiochain.CurioBlockstore) ([]harmonytask.TaskInterface, error) {
+	bstore curiochain.CurioBlockstore, machineHostPort string) ([]harmonytask.TaskInterface, error) {
 	var activeTasks []harmonytask.TaskInterface
 	// Sealing
 
@@ -240,7 +241,7 @@ func addSealingTasks(
 	if cfg.Subsystems.EnableBatchSeal {
 		slotMgr = slotmgr.NewSlotMgr()
 
-		batchSealTask, err := sealsupra.NewSupraSeal(cfg.Subsystems.BatchSealSectorSize, cfg.Subsystems.BatchSealBatchSize, cfg.Subsystems.BatchSealPipelines, slotMgr, db, full, stor, si)
+		batchSealTask, err := sealsupra.NewSupraSeal(cfg.Subsystems.BatchSealSectorSize, cfg.Subsystems.BatchSealBatchSize, cfg.Subsystems.BatchSealPipelines, machineHostPort, slotMgr, db, full, stor, si)
 		if err != nil {
 			return nil, xerrors.Errorf("setting up batch sealer: %w", err)
 		}
