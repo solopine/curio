@@ -49,6 +49,7 @@ func NewPoRepTask(db *harmonydb.DB, api PoRepAPI, sp *SealPoller, sc *ffi.SealCa
 }
 
 func (p *PoRepTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bool, err error) {
+	log.Infow("----PoRepTask.do", "taskID", taskID)
 	ctx := context.Background()
 
 	var sectorParamsArr []struct {
@@ -74,6 +75,8 @@ func (p *PoRepTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----PoRepTask.do", "taskID", taskID, "sectorParams", sectorParams)
+
 	sealed, err := cid.Parse(sectorParams.SealedCID)
 	if err != nil {
 		return false, xerrors.Errorf("failed to parse sealed cid: %w", err)
@@ -93,6 +96,7 @@ func (p *PoRepTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 	if err != nil {
 		return false, xerrors.Errorf("failed to create miner address: %w", err)
 	}
+	log.Infow("----PoRepTask.do.2", "sectorParams", sectorParams, "ts", ts, "maddr", maddr.String())
 
 	buf := new(bytes.Buffer)
 	if err := maddr.MarshalCBOR(buf); err != nil {
@@ -112,6 +116,7 @@ func (p *PoRepTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----PoRepTask.do.3", "sectorParams", sectorParams)
 	// COMPUTE THE PROOF!
 
 	proof, err := p.sc.PoRepSnark(ctx, sr, sealed, unsealed, sectorParams.TicketValue, abi.InteractiveSealRandomness(rand))

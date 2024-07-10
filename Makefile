@@ -83,11 +83,19 @@ deps: $(BUILD_DEPS)
 
 CURIO_TAGS ?= cunative
 
+#curio: $(BUILD_DEPS)
+#	rm -f curio
+#	GOAMD64=v3 CGO_LDFLAGS_ALLOW=$(CGO_LDFLAGS_ALLOW) $(GOCC) build $(GOFLAGS) \
+#	-tags "$(CURIO_TAGS)" \
+#	-o curio -ldflags " -s -w \
+#	-X github.com/filecoin-project/curio/build.IsOpencl=$(FFI_USE_OPENCL) \
+#	-X github.com/filecoin-project/curio/build.CurrentCommit=+git_`git log -1 --format=%h_%cI`" \
+#	./cmd/curio
 curio: $(BUILD_DEPS)
 	rm -f curio
-	GOAMD64=v3 CGO_LDFLAGS_ALLOW=$(CGO_LDFLAGS_ALLOW) $(GOCC) build $(GOFLAGS) \
+	GOAMD64=v3 CGO_LDFLAGS_ALLOW=$(CGO_LDFLAGS_ALLOW) $(GOCC) build -gcflags "all=-N -l" $(GOFLAGS) \
 	-tags "$(CURIO_TAGS)" \
-	-o curio -ldflags " -s -w \
+	-o curio -ldflags " \
 	-X github.com/filecoin-project/curio/build.IsOpencl=$(FFI_USE_OPENCL) \
 	-X github.com/filecoin-project/curio/build.CurrentCommit=+git_`git log -1 --format=%h_%cI`" \
 	./cmd/curio

@@ -190,6 +190,8 @@ func (t *TreeDTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----TreeDTask.do", "taskID", taskID, "sref", sref)
+
 	// Fetch the Sector to local storage
 	fsPaths, pathIds, release, err := t.sc.PreFetch(ctx, sref, &taskID)
 	if err != nil {

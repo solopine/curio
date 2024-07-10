@@ -110,8 +110,8 @@ func (a *WebRPC) ClusterTaskHistory(ctx context.Context) ([]TaskHistorySummary, 
 			return nil, err // Handle error
 		}
 
-		t.Posted = posted.Local().Round(time.Second).Format("02 Jan 06 15:04")
-		t.Start = start.Local().Round(time.Second).Format("02 Jan 06 15:04")
+		t.Posted = posted.Local().Round(time.Second).Format("02 Jan 06 15:04:05")
+		t.Start = start.Local().Round(time.Second).Format("02 Jan 06 15:04:05")
 		//t.End = end.Local().Round(time.Second).Format("02 Jan 06 15:04")
 
 		t.Queued = start.Sub(posted).Round(time.Second).String()

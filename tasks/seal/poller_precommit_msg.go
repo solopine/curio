@@ -117,6 +117,7 @@ func (s *SealPoller) pollPrecommitMsgLanded(ctx context.Context, task pollTask) 
 			}
 
 			if pci != nil {
+				log.Infow("----pollPrecommitMsgLanded.StateSectorPreCommitInfo", "pci", pci)
 				randHeight := pci.PreCommitEpoch + policy.GetPreCommitChallengeDelay()
 
 				_, err := s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline SET 
