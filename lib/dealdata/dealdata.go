@@ -2,6 +2,7 @@ package dealdata
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
 	"io"
 	"net/url"
 	"strconv"
@@ -209,11 +210,30 @@ func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, s
 
 						reader, _ := padreader.New(pr, uint64(*p.DataRawSize))
 						pieceReaders = append(pieceReaders, reader)
+					} else if goUrl.Scheme == "txcar" {
+						log.Infow("----getDealMetadata.txcar1", "txCarInfoStr", goUrl.Opaque)
+						txCarInfoStr := goUrl.Opaque
+						txPiece, err := txcar.ParseTxPiece(txCarInfoStr)
+						if err != nil {
+							log.Errorw("---getDealMetadata.ParseTxPiece", "txCarInfoStr", txCarInfoStr)
+							return nil, xerrors.Errorf("ParseTxPiece: %w", err)
+						}
+						if txPiece == nil {
+							log.Errorw("---getDealMetadata.ParseTxPiece is nil", "txCarInfoStr", txCarInfoStr)
+							return nil, xerrors.Errorf("ParseTxPiece is nil")
+						}
+						log.Infow("----getDealMetadata.txcar2", "txPiece", txPiece)
+						rc, err := txPiece.NewTxPieceReader(ctx)
+						if err != nil {
+							return nil, xerrors.Errorf("NewTxCarReader: %w", err)
+						}
+						closers = append(closers, rc)
+						reader, _ := padreader.New(rc, uint64(*p.DataRawSize))
+						pieceReaders = append(pieceReaders, reader)
 					} else {
 						reader, _ := padreader.New(NewUrlReader(dataUrl, *p.DataRawSize), uint64(*p.DataRawSize))
 						pieceReaders = append(pieceReaders, reader)
 					}
-
 				} else { // padding piece (w/o fr32 padding, added in TreeD)
 					pieceReaders = append(pieceReaders, nullreader.NewNullReader(abi.PaddedPieceSize(p.PieceSize).Unpadded()))
 				}

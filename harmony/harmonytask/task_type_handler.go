@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/xerrors"
 	"runtime"
 	"strconv"
 	"time"
@@ -44,6 +45,7 @@ retryAddTask:
 	})
 
 	if err != nil {
+		//log.Errorw("----AddTask", "err", err)
 		if harmonydb.IsErrUniqueContraint(err) {
 			log.Debugf("addtask(%s) saw unique constraint, so it's added already.", h.Name)
 			return
@@ -145,7 +147,7 @@ canAcceptAgain:
 	// if recovering we don't need to try to claim anything because those tasks are already claimed by us
 	if from != WorkSourceRecover {
 		// 4. Can we claim the work for our hostname?
-		ct, err := h.TaskEngine.db.Exec(h.TaskEngine.ctx, "UPDATE harmony_task SET owner_id=$1 WHERE id=$2 AND owner_id IS NULL", h.TaskEngine.ownerID, *tID)
+		ct, err := h.TaskEngine.db.Exec(h.TaskEngine.ctx, "UPDATE harmony_task SET owner_id=$1, update_time=CURRENT_TIMESTAMP WHERE id=$2 AND owner_id IS NULL", h.TaskEngine.ownerID, *tID)
 		if err != nil {
 			log.Error(err)
 
@@ -343,13 +345,13 @@ func (h *taskTypeHandler) AssertMachineHasCapacity() error {
 	}
 
 	if r.Cpu-h.Cost.Cpu < 0 {
-		return errors.New("Did not accept " + h.Name + " task: out of cpu")
+		return xerrors.Errorf("Did not accept %s task: out of cpu. r.Cpu:%v, h.Cost.Cpu:%v", h.Name, r.Cpu, h.Cost.Cpu)
 	}
 	if h.Cost.Ram > r.Ram {
-		return errors.New("Did not accept " + h.Name + " task: out of RAM")
+		return xerrors.Errorf("Did not accept %s task: out of RAM. r.Ram:%v, h.Cost.Ram:%v", h.Name, r.Ram, h.Cost.Ram)
 	}
 	if r.Gpu-h.Cost.Gpu < 0 {
-		return errors.New("Did not accept " + h.Name + " task: out of available GPU")
+		return xerrors.Errorf("Did not accept %s task: out of GPU. r.Gpu:%v, h.Cost.Gpu:%v", h.Name, r.Gpu, h.Cost.Gpu)
 	}
 
 	if h.TaskTypeDetails.Cost.Storage != nil {

@@ -73,6 +73,8 @@ func (t *TreeRCTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----TreeRCTask.do", "taskID", taskID, "sref", sref)
+
 	dd, err := dealdata.DealDataSDRPoRep(ctx, t.db, t.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)

@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
+	txcarlib "github.com/solopine/txcar/txcar"
 	"io"
 	"os"
 	"path/filepath"
@@ -269,7 +271,7 @@ func (sb *SealCalls) TreeRC(ctx context.Context, task *harmonytask.TaskID, secto
 				return cid.Undef, cid.Undef, xerrors.Errorf("truncating reflinked sealed file: %w", err)
 			}
 		} else {
-			log.Errorw("reflink treed -> sealed failed, falling back to slow copy, use single scratch btrfs or xfs filesystem", "error", err, "sector", sector, "cache", fspaths.Cache, "sealed", fspaths.Sealed)
+			log.Warnw("reflink treed -> sealed failed, falling back to slow copy, use single scratch btrfs or xfs filesystem", "error", err, "sector", sector, "cache", fspaths.Cache, "sealed", fspaths.Sealed)
 
 			// fallback to slow copy, copy ssize bytes from treed to sealed
 			dst, err := os.OpenFile(fspaths.Sealed, os.O_WRONLY|os.O_CREATE, 0644)
@@ -352,17 +354,19 @@ func (sb *SealCalls) GenerateSynthPoRep() {
 }
 
 func (sb *SealCalls) PoRepSnark(ctx context.Context, sn storiface.SectorRef, sealed, unsealed cid.Cid, ticket abi.SealRandomness, seed abi.InteractiveSealRandomness) ([]byte, error) {
+	log.Infow("----PoRepSnark.1", "sn", sn)
 	vproof, err := sb.sectors.storage.GeneratePoRepVanillaProof(ctx, sn, sealed, unsealed, ticket, seed)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to generate vanilla proof: %w", err)
 	}
 
+	log.Infow("----PoRepSnark.2", "sn", sn)
 	ctx = ffiselect.WithLogCtx(ctx, "sector", sn.ID, "sealed", sealed, "unsealed", unsealed, "ticket", ticket, "seed", seed)
 	proof, err := ffiselect.FFISelect.SealCommitPhase2(ctx, vproof, sn.ID.Number, sn.ID.Miner)
 	if err != nil {
 		return nil, xerrors.Errorf("computing seal proof failed: %w", err)
 	}
-
+	log.Infow("----PoRepSnark.3", "sn", sn)
 	ok, err := ffi.VerifySeal(proof2.SealVerifyInfo{
 		SealProof:             sn.ProofType,
 		SectorID:              sn.ID,
@@ -525,7 +529,7 @@ func changePathType(path string, newType storiface.SectorFileType) (string, erro
 
 	return newPath, nil
 }
-func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool) error {
+func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool, txPiece *txcarlib.TxPiece) error {
 	sectorPaths, pathIDs, releaseSector, err := sb.sectors.AcquireSector(ctx, nil, sector, storiface.FTCache, storiface.FTNone, storiface.PathSealing)
 	if err != nil {
 		return xerrors.Errorf("acquiring sector paths: %w", err)
@@ -552,6 +556,13 @@ func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.Sector
 				log.Errorf("declare unsealed sector error: %+v", err)
 			}
 		}()
+		if txPiece != nil {
+			err := txcar.CreateFakeUnsealedFile(sectorPaths.Unsealed, *txPiece)
+			if err != nil {
+				return xerrors.Errorf("CreateFakeUnsealedFile - %s: %w", sectorPaths.Unsealed, err)
+			}
+			goto afterUnsealedMove
+		}
 
 		// tree-d contains exactly unsealed data in the prefix, so
 		// * we move it to a temp file

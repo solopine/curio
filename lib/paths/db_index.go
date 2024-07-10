@@ -326,6 +326,7 @@ retryReportHealth:
 		report.Stat.Used,
 		id)
 	if err != nil {
+		log.Errorw("----StorageReportHealth.1", "err", err)
 		//return xerrors.Errorf("updating storage health in DB fails with err: %w", err)
 		if harmonydb.IsErrSerialization(err) {
 			time.Sleep(retryWait)

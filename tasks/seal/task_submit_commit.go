@@ -126,6 +126,8 @@ func (s *SubmitCommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----SubmitCommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
+
 	var pieces []struct {
 		PieceIndex int64           `db:"piece_index"`
 		PieceCID   string          `db:"piece_cid"`

@@ -3,6 +3,7 @@ package seal
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 
 	"golang.org/x/xerrors"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/filecoin-project/curio/harmony/resources"
 	"github.com/filecoin-project/curio/lib/dealdata"
 	ffi2 "github.com/filecoin-project/curio/lib/ffi"
-	"github.com/filecoin-project/curio/lib/paths"
 	storiface "github.com/filecoin-project/curio/lib/storiface"
 
 	"github.com/filecoin-project/lotus/chain/actors/policy"
@@ -61,6 +61,7 @@ func NewSDRTask(api SDRAPI, db *harmonydb.DB, sp *SealPoller, sc *ffi2.SealCalls
 }
 
 func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bool, err error) {
+	log.Infow("----sdr.do", "taskID", taskID)
 	ctx := context.Background()
 
 	var sectorParamsArr []struct {
@@ -82,6 +83,7 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----sdr.do.1", "taskID", taskID, "sectorParams", sectorParams)
 	dealData, err := dealdata.DealDataSDRPoRep(ctx, s.db, s.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)
@@ -95,6 +97,7 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----sdr.do.2", "taskID", taskID, "sref", sref, "dealData.CommD", dealData.CommD.String(), "dealData.IsUnpadded", dealData.IsUnpadded, "dealData.KeepUnsealed", dealData.KeepUnsealed)
 	// get ticket
 	maddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
 	if err != nil {
@@ -107,6 +110,8 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	if err != nil {
 		return false, xerrors.Errorf("getting ticket: %w", err)
 	}
+
+	log.Infow("----sdr.do.3", "taskID", taskID, "sref", sref, "ticketEpoch", ticketEpoch, "ticket", hex.EncodeToString(ticket))
 
 	// do the SDR!!
 
@@ -122,6 +127,8 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	if err != nil {
 		return false, xerrors.Errorf("generating sdr: %w", err)
 	}
+
+	log.Infow("----sdr.do.4.done", "taskID", taskID, "sref", sref)
 
 	// store success!
 	n, err := s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline
@@ -163,13 +170,50 @@ func GetTicket(ctx context.Context, api TicketNodeAPI, maddr address.Address) (a
 	return abi.SealRandomness(rand), ticketEpoch, nil
 }
 
-func (s *SDRTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.TaskEngine) (*harmonytask.TaskID, error) {
-	if s.min > len(ids) {
-		log.Debugw("did not accept task", "name", "SDR", "reason", "below min", "min", s.min, "count", len(ids))
+func (t *SDRTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.TaskEngine) (*harmonytask.TaskID, error) {
+	if t.min > len(ids) {
+		log.Debugw("did not accept task", "name", "SDR", "reason", "below min", "min", t.min, "count", len(ids))
 		return nil, nil
 	}
 
 	id := ids[0]
+
+	ctx := context.Background()
+	ls, err := t.sc.LocalStorage(ctx)
+	if err != nil {
+		return nil, xerrors.Errorf("getting local storage: %w", err)
+	}
+	log.Infow("----sdr.CanAccept.LocalStorage", "ls", ls)
+	for _, id := range ids {
+		s, err := t.taskToSector(id)
+		log.Infow("----sdr.CanAccept", "s", s, "TaskId", id)
+		if err != nil {
+			continue
+		}
+		var storageIds []string
+		err = t.db.Select(ctx, &storageIds, `SELECT storage_id FROM sector_location WHERE miner_id=$1 AND sector_num=$2 AND sector_filetype=$3`,
+			s.SpID, s.SectorNumber, storiface.FTCache)
+		if err != nil {
+			return nil, xerrors.Errorf("getting sector id from db: %w", err)
+		}
+		log.Infow("----sdr.CanAccept.Select", "storageIds", storageIds)
+		if len(storageIds) == 0 {
+			log.Infow("----sdr.CanAccept.newly", "s", s, "TaskId", id)
+			return &id, nil
+		}
+
+		log.Infow("----sdr.CanAccept.existed", "s", s, "TaskId", id)
+		for _, localStoragePath := range ls {
+			if localStoragePath.CanSeal {
+				for _, storageId := range storageIds {
+					if storageId == string(localStoragePath.ID) {
+						return &id, nil
+					}
+				}
+			}
+		}
+	}
+
 	return &id, nil
 }
 
@@ -186,7 +230,7 @@ func (s *SDRTask) TypeDetails() harmonytask.TaskTypeDetails {
 			Cpu:     4, // todo multicore sdr
 			Gpu:     0,
 			Ram:     (64 << 30) + (256 << 20),
-			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, paths.MinFreeStoragePercentage),
+			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, 50),
 		},
 		MaxFailures: 2,
 		Follows:     nil,

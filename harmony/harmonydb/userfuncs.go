@@ -31,7 +31,31 @@ func (db *DB) Exec(ctx context.Context, sql rawStringOnly, arguments ...any) (co
 	if db.usedInTransaction() {
 		return 0, errTx
 	}
+	//st := db.pgx.Stat()
+	//logger.Infow("Exec",
+	//	"pool.stat.AcquireCount", st.AcquireCount(),
+	//	"pool.stat.AcquireDuration", st.AcquireDuration(),
+	//	"pool.stat.AcquiredConns", st.AcquiredConns(),
+	//	"pool.stat.CanceledAcquireCount", st.CanceledAcquireCount(),
+	//	"pool.stat.ConstructingConns", st.ConstructingConns(),
+	//	"pool.stat.EmptyAcquireCount", st.EmptyAcquireCount(),
+	//	"pool.stat.IdleConns", st.IdleConns(),
+	//	"pool.stat.MaxConns", st.MaxConns(),
+	//	"pool.stat.TotalConns", st.TotalConns(),
+	//	"pool.stat.NewConnsCount", st.NewConnsCount(),
+	//	"pool.stat.MaxLifetimeDestroyCount", st.MaxLifetimeDestroyCount(),
+	//	"pool.stat.MaxIdleDestroyCount", st.MaxIdleDestroyCount(),
+	//)
+	//c1, err := db.pgx.Acquire(ctx)
+	//if err != nil {
+	//	return 0, err
+	//}
+	//defer c1.Release()
+	//
+	//logger.Infow("Exec.c1")
+
 	res, err := db.pgx.Exec(ctx, string(sql), arguments...)
+	//logger.Infow("Exec.execed")
 	return int(res.RowsAffected()), err
 }
 

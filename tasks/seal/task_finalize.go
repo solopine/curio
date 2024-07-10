@@ -2,6 +2,9 @@ package seal
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
+	txcarlib "github.com/solopine/txcar/txcar"
+	"net/url"
 
 	"golang.org/x/xerrors"
 
@@ -80,10 +83,34 @@ func (f *FinalizeTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 	}
 	task := tasks[0]
 
+	log.Infow("----FinalizeTask.do", "taskID", taskID, "task", task)
+
 	var keepUnsealed bool
 
 	if err := f.db.QueryRow(ctx, `SELECT COALESCE(BOOL_OR(NOT data_delete_on_finalize), FALSE) FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&keepUnsealed); err != nil {
 		return false, err
+	}
+
+	var txPiece *txcarlib.TxPiece
+	{
+		var dataUrl string
+		if err := f.db.QueryRow(ctx, `SELECT data_url FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&dataUrl); err != nil {
+			return false, err
+		}
+		goUrl, err := url.Parse(dataUrl)
+		if err != nil {
+			return false, err
+		}
+
+		if goUrl.Scheme == "txcar" {
+			txPiece, err = txcar.ParseTxPiece(goUrl.Opaque)
+			if err != nil {
+				return false, err
+			}
+			if txPiece == nil {
+				return false, xerrors.Errorf("ParseTxPiece is nil")
+			}
+		}
 	}
 
 	sector := storiface.SectorRef{
@@ -140,7 +167,7 @@ func (f *FinalizeTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 		}
 	}
 
-	err = f.sc.FinalizeSector(ctx, sector, keepUnsealed)
+	err = f.sc.FinalizeSector(ctx, sector, keepUnsealed, txPiece)
 	if err != nil {
 		return false, xerrors.Errorf("finalizing sector: %w", err)
 	}
@@ -244,8 +271,10 @@ func (f *FinalizeTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.T
 		}
 
 		for _, l := range ls {
-			if string(l.ID) == t.StorageID {
-				return &t.TaskID, nil
+			if l.CanSeal {
+				if string(l.ID) == t.StorageID {
+					return &t.TaskID, nil
+				}
 			}
 		}
 	}

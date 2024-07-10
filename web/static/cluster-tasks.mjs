@@ -8,7 +8,7 @@ customElements.define('cluster-tasks',class ClusterTasks extends LitElement {
     }
     async loadData() {
         this.data = await RPCCall('ClusterTaskSummary') || [];
-        setTimeout(() => this.loadData(), 1000);
+        setTimeout(() => this.loadData(), 30000);
         this.requestUpdate();
     }
     render() {
@@ -23,6 +23,7 @@ customElements.define('cluster-tasks',class ClusterTasks extends LitElement {
                     <th>ID</th>
                     <th>Posted</th>
                     <th>Owner</th>
+                    <th>Sector</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -33,6 +34,7 @@ customElements.define('cluster-tasks',class ClusterTasks extends LitElement {
                         <td>${entry.ID}</td>
                         <td>${entry.SincePostedStr}</td>
                         <td>${entry.OwnerID ? html`<a href="/pages/node_info/?id=${entry.OwnerID}">${entry.Owner}</a>`:''}</td>
+                        <td>${entry.Sector}</td>
                     </tr>
                     `)}
                 </tbody>
