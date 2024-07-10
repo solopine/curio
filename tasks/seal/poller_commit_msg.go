@@ -157,7 +157,7 @@ func (s *SealPoller) sendCommitBatch(ctx context.Context, spid int64, sectors []
 	if len(sectors) < miner.MinAggregatedSectors {
 		for i := range sectors {
 			s.pollers[pollerCommitMsg].Val(ctx)(func(id harmonytask.TaskID, tx *harmonydb.Tx) (shouldCommit bool, seriousError error) {
-				n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_commit_msg = $1 WHERE sp_id = $2 AND sector_number = $3 AND task_id_commit_msg IS NULL`, id, spid, sectors[i])
+				n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_commit_msg = $1 WHERE sp_id = $2 AND sector_number = $3 AND task_id_commit_msg IS NULL AND after_commit_msg = FALSE`, id, spid, sectors[i])
 				if err != nil {
 					return false, xerrors.Errorf("update sectors_sdr_pipeline: %w", err)
 				}
@@ -171,7 +171,7 @@ func (s *SealPoller) sendCommitBatch(ctx context.Context, spid int64, sectors []
 	}
 
 	s.pollers[pollerCommitMsg].Val(ctx)(func(id harmonytask.TaskID, tx *harmonydb.Tx) (shouldCommit bool, seriousError error) {
-		n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_commit_msg = $1 WHERE sp_id = $2 AND sector_number = ANY($3) AND task_id_commit_msg IS NULL`, id, spid, sectors)
+		n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_commit_msg = $1 WHERE sp_id = $2 AND sector_number = ANY($3) AND task_id_commit_msg IS NULL AND after_commit_msg = FALSE`, id, spid, sectors)
 		if err != nil {
 			return false, xerrors.Errorf("update sectors_sdr_pipeline: %w", err)
 		}

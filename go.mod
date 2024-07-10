@@ -92,6 +92,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/triplewz/poseidon v0.0.2
 	github.com/urfave/cli/v2 v2.27.4
+	github.com/solopine/txcar v0.4.7
 	github.com/whyrusleeping/cbor-gen v0.2.0
 	github.com/yugabyte/gocql v1.6.0-yb-1
 	github.com/yugabyte/pgx/v5 v5.5.3-yb-2
@@ -202,11 +203,13 @@ require (
 	github.com/iancoleman/orderedmap v0.1.0 // indirect
 	github.com/ipfs/bbloom v0.0.4 // indirect
 	github.com/ipfs/go-bitfield v1.1.0 // indirect
+	github.com/ipfs/go-bitfield v1.1.0 // indirect
 	github.com/ipfs/go-blockservice v0.5.2 // indirect
 	github.com/ipfs/go-ds-badger2 v0.1.3 // indirect
 	github.com/ipfs/go-ds-leveldb v0.5.0 // indirect
 	github.com/ipfs/go-ds-measure v0.2.0 // indirect
 	github.com/ipfs/go-ipfs-blockstore v1.3.1 // indirect
+	github.com/ipfs/go-ipfs-chunker v0.0.5 // indirect
 	github.com/ipfs/go-ipfs-delay v0.0.1 // indirect
 	github.com/ipfs/go-ipfs-ds-help v1.1.1 // indirect
 	github.com/ipfs/go-ipfs-exchange-interface v0.2.1 // indirect
@@ -363,3 +366,5 @@ require (
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
 
 replace github.com/KarpelesLab/reflink => github.com/magik6k/reflink v1.0.2-patch1
+
+replace github.com/filecoin-project/lotus => github.com/solopine/lotus v1.32.0-rc2-curio-1

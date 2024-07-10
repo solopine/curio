@@ -70,6 +70,7 @@ func (mw *MessageWatcher) run() {
 }
 
 func (mw *MessageWatcher) update() {
+	log.Debugw("----MessageWatcher.update")
 	ctx := context.Background()
 
 	tsk := *mw.bestTs.Load()
@@ -98,6 +99,8 @@ func (mw *MessageWatcher) update() {
 		}
 		if n > 0 {
 			log.Debugw("assigned pending messages to ourselves", "assigned", n)
+		} else {
+			//log.Debugw("----MessageWatcher.update.0")
 		}
 	}
 
@@ -118,7 +121,7 @@ func (mw *MessageWatcher) update() {
 		log.Errorf("failed to get assigned messages: %+v", err)
 		return
 	}
-
+	log.Debugw("----MessageWatcher.update.1", "msgs", len(msgs))
 	// get address/nonce set to check
 	toCheck := make(map[address.Address]uint64)
 
@@ -144,6 +147,7 @@ func (mw *MessageWatcher) update() {
 
 	// check if any of the messages we have assigned to us are now on chain, and have been for MinConfidence epochs
 	for _, msg := range msgs {
+		log.Debugw("MessageWatcher.update.msgs.loop", "msg.Cid", msg.Cid, "msg.Nonce", msg.Nonce, "toCheck[msg.FromAddr]", toCheck[msg.FromAddr])
 		if msg.Nonce > toCheck[msg.FromAddr] {
 			continue // definitely not on chain yet
 		}
@@ -153,7 +157,7 @@ func (mw *MessageWatcher) update() {
 			log.Errorf("failed to search for message: %+v", err)
 			continue
 		}
-
+		//log.Debugw("MessageWatcher.update.msgs.loop.search", "toCheck[msg.FromAddr]", toCheck[msg.FromAddr], "msg", msg, "look", look)
 		if look == nil {
 			continue // not on chain yet (or not executed yet)
 		}
@@ -163,12 +167,14 @@ func (mw *MessageWatcher) update() {
 			log.Errorf("failed to get tipset cid: %+v", err)
 			continue
 		}
+		//log.Debugw("MessageWatcher.update.msgs.loop.tskCid", "toCheck[msg.FromAddr]", toCheck[msg.FromAddr], "msg", msg, "tskCid", tskCid)
 
 		emsg, err := mw.api.ChainGetMessage(ctx, look.Message)
 		if err != nil {
 			log.Errorf("failed to get message: %+v", err)
 			continue
 		}
+		//log.Debugw("MessageWatcher.update.msgs.loop.ChainGetMessage", "toCheck[msg.FromAddr]", toCheck[msg.FromAddr], "msg", msg, "emsg", emsg)
 
 		execMsg, err := json.Marshal(emsg)
 		if err != nil {
@@ -176,6 +182,7 @@ func (mw *MessageWatcher) update() {
 			continue
 		}
 
+		//log.Debugw("MessageWatcher.update.msgs.loop.message_waits.update.before", "toCheck[msg.FromAddr]", toCheck[msg.FromAddr], "msg", msg)
 		// record in db
 		_, err = mw.db.Exec(ctx, `UPDATE message_waits SET
 			waiter_machine_id = NULL,
@@ -190,6 +197,7 @@ func (mw *MessageWatcher) update() {
 			log.Errorf("failed to update message wait: %+v", err)
 			continue
 		}
+		//log.Debugw("MessageWatcher.update.msgs.loop.message_waits.update.after", "toCheck[msg.FromAddr]", toCheck[msg.FromAddr], "msg", msg)
 	}
 }
 

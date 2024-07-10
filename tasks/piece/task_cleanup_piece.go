@@ -2,6 +2,7 @@ package piece
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
 	"time"
 
 	"golang.org/x/xerrors"
@@ -76,8 +77,9 @@ func (c *CleanupPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 
 	// select by cleanup_task_id
 	var pieceID int64
+	var pieceCidStr string
 
-	err = c.db.QueryRow(ctx, "SELECT id FROM parked_pieces WHERE cleanup_task_id = $1", taskID).Scan(&pieceID)
+	err = c.db.QueryRow(ctx, "SELECT id, piece_cid FROM parked_pieces WHERE cleanup_task_id = $1", taskID).Scan(&pieceID, &pieceCidStr)
 	if err != nil {
 		return false, xerrors.Errorf("query parked_piece: %w", err)
 	}
@@ -100,6 +102,16 @@ func (c *CleanupPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 	}
 
 	// remove from storage
+	isTxCar, err := txcar.IsTxPieceStr(ctx, c.db, pieceCidStr)
+	if err != nil {
+		log.Infow("IsTxCarPieceStr error", "pieceCidStr", pieceCidStr, "error", err)
+	}
+	if isTxCar {
+		log.Infow("IsTxCarPieceStr, so just skip RemovePiece", "pieceCidStr", pieceCidStr)
+		return true, nil
+	}
+
+	// not tx car
 	err = c.sc.RemovePiece(ctx, storiface.PieceNumber(pieceID))
 	if err != nil {
 		log.Errorw("remove piece", "piece_id", pieceID, "error", err)

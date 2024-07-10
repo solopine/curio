@@ -13,6 +13,7 @@ import (
 )
 
 func Move(from, to string) error {
+	log.Infow("----move", "from", from, "to", to)
 	from, err := homedir.Expand(from)
 	if err != nil {
 		return xerrors.Errorf("move: expanding from: %w", err)
@@ -46,7 +47,51 @@ func Move(from, to string) error {
 	} else {
 		cmd = exec.Command("/usr/bin/env", "mv", "-t", toDir, from) // nolint
 	}
+	log.Infow("----move.cmd", "cmd", cmd.String())
+	cmd.Stderr = &errOut
+	if err := cmd.Run(); err != nil {
+		return xerrors.Errorf("exec mv (stderr: %s): %w", strings.TrimSpace(errOut.String()), err)
+	}
 
+	return nil
+}
+
+func Copy(from, to string) error {
+	log.Infow("----copy", "from", from, "to", to)
+	from, err := homedir.Expand(from)
+	if err != nil {
+		return xerrors.Errorf("copy: expanding from: %w", err)
+	}
+
+	to, err = homedir.Expand(to)
+	if err != nil {
+		return xerrors.Errorf("copy: expanding to: %w", err)
+	}
+
+	if filepath.Base(from) != filepath.Base(to) {
+		return xerrors.Errorf("copy: base names must match ('%s' != '%s')", filepath.Base(from), filepath.Base(to))
+	}
+
+	log.Debugw("copy sector data", "from", from, "to", to)
+
+	toDir := filepath.Dir(to)
+
+	// `cp` has decades of experience in moving files quickly; don't pretend we
+	//  can do better
+
+	var errOut bytes.Buffer
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		if err := os.MkdirAll(toDir, 0777); err != nil {
+			return xerrors.Errorf("failed exec MkdirAll: %s", err)
+		}
+
+		cmd = exec.Command("/usr/bin/env", "cp", from, toDir) // nolint
+	} else {
+		cmd = exec.Command("/usr/bin/env", "cp", "-t", toDir, from) // nolint
+	}
+	log.Infow("----copy.cmd", "cmd", cmd.String())
 	cmd.Stderr = &errOut
 	if err := cmd.Run(); err != nil {
 		return xerrors.Errorf("exec mv (stderr: %s): %w", strings.TrimSpace(errOut.String()), err)

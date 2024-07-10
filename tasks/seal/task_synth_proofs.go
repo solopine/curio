@@ -2,6 +2,9 @@ package seal
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
+	txcarlib "github.com/solopine/txcar/txcar"
+	"net/url"
 	"strings"
 
 	"github.com/ipfs/go-cid"
@@ -60,6 +63,8 @@ func (s *SyntheticProofTask) Do(taskID harmonytask.TaskID, stillOwned func() boo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----SyntheticProofTask.do", "taskID", taskID, "sectorParams", sectorParams)
+
 	// Exit here successfully if synthetic proofs are not required
 	_, ok := abi.Synthetic[sectorParams.RegSealProof]
 	if !ok {
@@ -75,6 +80,28 @@ func (s *SyntheticProofTask) Do(taskID harmonytask.TaskID, stillOwned func() boo
 
 	if err := s.db.QueryRow(ctx, `SELECT COALESCE(BOOL_OR(NOT data_delete_on_finalize), FALSE) FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, sectorParams.SpID, sectorParams.SectorNumber).Scan(&keepUnsealed); err != nil {
 		return false, err
+	}
+
+	var txPiece *txcarlib.TxPiece
+	{
+		var dataUrl string
+		if err := s.db.QueryRow(ctx, `SELECT data_url FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, sectorParams.SpID, sectorParams.SectorNumber).Scan(&dataUrl); err != nil {
+			return false, err
+		}
+		goUrl, err := url.Parse(dataUrl)
+		if err != nil {
+			return false, err
+		}
+
+		if goUrl.Scheme == "txcar" {
+			txPiece, err = txcar.ParseTxPiece(goUrl.Opaque)
+			if err != nil {
+				return false, err
+			}
+			if txPiece == nil {
+				return false, xerrors.Errorf("ParseTxPiece is nil")
+			}
+		}
 	}
 
 	sealed, err := cid.Parse(sectorParams.SealedCID)
@@ -100,7 +127,7 @@ func (s *SyntheticProofTask) Do(taskID harmonytask.TaskID, stillOwned func() boo
 		return false, xerrors.Errorf("getting deal data: %w", err)
 	}
 
-	err = s.sc.SyntheticProofs(ctx, &taskID, sref, sealed, unsealed, sectorParams.TicketValue, dealData.PieceInfos, keepUnsealed)
+	err = s.sc.SyntheticProofs(ctx, &taskID, sref, sealed, unsealed, sectorParams.TicketValue, dealData.PieceInfos, keepUnsealed, txPiece)
 	if err != nil {
 		serr := resetSectorSealingState(ctx, sectorParams.SpID, sectorParams.SectorNumber, err, s.db, s.TypeDetails().Name)
 		if serr != nil {

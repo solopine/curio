@@ -122,7 +122,7 @@ func (s *SealPoller) pollStartBatchPrecommitMsg(ctx context.Context, tasks []pol
 
 func (s *SealPoller) sendPreCommitBatch(ctx context.Context, spid int64, sectors []int64) {
 	s.pollers[pollerPrecommitMsg].Val(ctx)(func(id harmonytask.TaskID, tx *harmonydb.Tx) (shouldCommit bool, seriousError error) {
-		n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_precommit_msg = $1 WHERE sp_id = $2 AND sector_number = ANY($3) AND task_id_precommit_msg IS NULL AND after_synth = TRUE`, id, spid, sectors)
+		n, err := tx.Exec(`UPDATE sectors_sdr_pipeline SET task_id_precommit_msg = $1 WHERE sp_id = $2 AND sector_number = ANY($3) AND task_id_precommit_msg IS NULL AND after_synth = TRUE AND after_precommit_msg = FALSE`, id, spid, sectors)
 		if err != nil {
 			return false, xerrors.Errorf("update sectors_sdr_pipeline: %w", err)
 		}
@@ -174,6 +174,7 @@ func (s *SealPoller) pollPrecommitMsgLanded(ctx context.Context, task pollTask) 
 			}
 
 			if pci != nil {
+				log.Infow("----pollPrecommitMsgLanded.StateSectorPreCommitInfo", "pci", pci)
 				randHeight := pci.PreCommitEpoch + policy.GetPreCommitChallengeDelay()
 
 				_, err := s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline SET 
