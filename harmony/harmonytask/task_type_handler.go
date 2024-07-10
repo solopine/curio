@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"runtime"
 	"strconv"
 	"time"
@@ -45,6 +46,7 @@ retryAddTask:
 	})
 
 	if err != nil {
+		//log.Errorw("----AddTask", "err", err)
 		if harmonydb.IsErrUniqueContraint(err) {
 			log.Debugf("addtask(%s) saw unique constraint, so it's added already.", h.Name)
 			return
@@ -146,9 +148,9 @@ canAcceptAgain:
 	// if recovering we don't need to try to claim anything because those tasks are already claimed by us
 	if from != WorkSourceRecover {
 		// 4. Can we claim the work for our hostname?
-		ct, err := h.TaskEngine.db.Exec(h.TaskEngine.ctx, "UPDATE harmony_task SET owner_id=$1 WHERE id=$2 AND owner_id IS NULL", h.TaskEngine.ownerID, *tID)
+		ct, err := h.TaskEngine.db.Exec(h.TaskEngine.ctx, "UPDATE harmony_task SET owner_id=$1, update_time=CURRENT_TIMESTAMP WHERE id=$2 AND owner_id IS NULL", h.TaskEngine.ownerID, *tID)
 		if err != nil {
-			log.Error(err)
+			log.Errorw("----h.TaskEngine.db.Exec", "h.TaskEngine.ownerID", h.TaskEngine.ownerID, "tID", tID, "err", err)
 
 			releaseStorage()
 			return false

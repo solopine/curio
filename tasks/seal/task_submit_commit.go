@@ -58,17 +58,18 @@ type commitConfig struct {
 }
 
 type SubmitCommitTask struct {
-	sp     *SealPoller
-	db     *harmonydb.DB
-	api    SubmitCommitAPI
-	prover storiface.Prover
+	sp      *SealPoller
+	db      *harmonydb.DB
+	api     SubmitCommitAPI
+	prover  storiface.Prover
+	fullApi api.FullNode
 
 	sender *message.Sender
 	as     *multictladdr.MultiAddressSelector
 	cfg    commitConfig
 }
 
-func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, prover storiface.Prover) *SubmitCommitTask {
+func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, prover storiface.Prover, fullApi api.FullNode) *SubmitCommitTask {
 
 	cnfg := commitConfig{
 		feeCfg:                     &cfg.Fees,
@@ -77,13 +78,14 @@ func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, 
 	}
 
 	return &SubmitCommitTask{
-		sp:     sp,
-		db:     db,
-		api:    api,
-		prover: prover,
-		sender: sender,
-		as:     as,
-		cfg:    cnfg,
+		sp:      sp,
+		db:      db,
+		api:     api,
+		prover:  prover,
+		fullApi: fullApi,
+		sender:  sender,
+		as:      as,
+		cfg:     cnfg,
 	}
 }
 
@@ -157,8 +159,11 @@ func (s *SubmitCommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 	var infos []proof.AggregateSealVerifyInfo
 	var sectors []int64
 
+	mcid := cid.Undef
 	for _, sectorParams := range sectorParamsArr {
 		sectorParams := sectorParams
+
+		log.Infow("----SubmitCommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
 
 		// Check miner ID is same for all sectors in batch
 		tmpMaddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
@@ -202,7 +207,17 @@ func (s *SubmitCommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 			return false, xerrors.Errorf("getting precommit info: %w", err)
 		}
 		if pci == nil {
-			return false, xerrors.Errorf("precommit info not found on chain")
+			var err1 error
+			mcid, err1 = s.queryCommitMessageCid(ctx, maddr, abi.SectorNumber(sectorParams.SectorNumber))
+			if err1 != nil {
+				return false, xerrors.Errorf("precommit info not found on chain: err:%w. err1:%w", err, err1)
+			}
+			if mcid != cid.Undef {
+				sectors = sectors[:0]
+				sectors = append(sectors, sectorParams.SectorNumber)
+				log.Warnw("----SubmitCommitTask. mcid already commit", "sp", sectorParams.SpID, "sector", sectorParams.SectorNumber)
+				break
+			}
 		}
 
 		var verifiedSize abi.PaddedPieceSize
@@ -333,16 +348,28 @@ func (s *SubmitCommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 		sectors = append(sectors, sectorParams.SectorNumber)
 	}
 
-	maxFee := s.cfg.feeCfg.MaxCommitBatchGasFee.FeeForSectors(len(infos))
+	if mcid == cid.Undef {
+		maxFee := s.cfg.feeCfg.MaxCommitBatchGasFee.FeeForSectors(len(infos))
 
-	msg, err := s.createCommitMessage(ctx, maddr, sectorParamsArr[0].RegSealProof, sectorParamsArr[0].SpID, collateral, params, infos, ts)
-	if err != nil {
-		return false, xerrors.Errorf("failed to create the commit message: %w", err)
-	}
+		msg, err := s.createCommitMessage(ctx, maddr, sectorParamsArr[0].RegSealProof, sectorParamsArr[0].SpID, collateral, params, infos, ts)
+		if err != nil {
+			return false, xerrors.Errorf("failed to create the commit message: %w", err)
+		}
 
-	mcid, err := s.sender.Send(ctx, msg, &api.MessageSendSpec{MaxFee: maxFee}, "commit")
-	if err != nil {
-		return false, xerrors.Errorf("pushing message to mpool: %w", err)
+		mcid, err = s.sender.Send(ctx, msg, &api.MessageSendSpec{MaxFee: maxFee}, "commit")
+		if err != nil {
+			var err1 error
+			mcid, err1 = s.queryCommitMessageCid(ctx, maddr, params.SectorActivations[0].SectorNumber)
+			if err1 != nil {
+				return false, xerrors.Errorf("pushing message to mpool: err:%w. err1:%w", err, err1)
+			}
+			if mcid == cid.Undef {
+				return false, xerrors.Errorf("pushing message to mpool (mcid == cid.Undef): err:%w", err)
+			}
+			sectors = sectors[:0]
+			sectors = append(sectors, int64(params.SectorActivations[0].SectorNumber))
+			log.Warnw("----CommitTask already", "sp", maddr.String(), "sector", params.SectorActivations[0].SectorNumber)
+		}
 	}
 
 	_, err = s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline SET commit_msg_cid = $1, after_commit_msg = TRUE, 
@@ -482,6 +509,54 @@ func (s *SubmitCommitTask) calculateCollateral(minerBalance abi.TokenAmount, col
 		}
 	}
 	return collateral
+}
+
+// when cid.Undef and err == nil, mean no commit
+func (s *SubmitCommitTask) queryCommitMessageCid(ctx context.Context, spAddr address.Address, sectorNumber abi.SectorNumber) (cid.Cid, error) {
+	log.Infow("----queryCommitMessageCid.0", "spAddr", spAddr.String(), "sectorNumber", sectorNumber)
+	si, err := s.fullApi.StateSectorGetInfo(ctx, spAddr, sectorNumber, types.EmptyTSK)
+	if err != nil {
+		return cid.Undef, err
+	}
+	if si == nil {
+		return cid.Undef, nil
+	}
+
+	ts, err := s.fullApi.ChainGetTipSetByHeight(ctx, si.Activation, types.EmptyTSK)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	msgs, err := s.fullApi.ChainGetMessagesInTipset(ctx, ts.Key())
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	log.Infow("----queryCommitMessageCid.1", "msgs", len(msgs), "spAddr", spAddr.String(), "sectorNumber", sectorNumber)
+	for _, msg := range msgs {
+		if msg.Message.Method != builtin.MethodsMiner.ProveCommitSectors3 {
+			continue
+		}
+
+		if msg.Message.To != spAddr {
+			continue
+		}
+
+		params := miner.ProveCommitSectors3Params{}
+
+		err := params.UnmarshalCBOR(bytes.NewReader(msg.Message.Params))
+		if err != nil {
+			return cid.Undef, err
+		}
+
+		for _, activation := range params.SectorActivations {
+			if activation.SectorNumber == sectorNumber {
+				log.Warnw("----queryCommitMessageCid.2", "msg.Cid", msg.Cid)
+				return msg.Cid, nil
+			}
+		}
+	}
+	return cid.Undef, xerrors.Errorf("queryCommitMessageCid not found. sp:%s, sector:%d", spAddr.String(), sectorNumber)
 }
 
 func (s *SubmitCommitTask) transferFinalizedSectorData(ctx context.Context, spID int64, sectors []int64) error {

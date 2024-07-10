@@ -83,12 +83,12 @@ const FSOverheadDen = 10
 
 // FSOverheadSeal is a map that represents the overheads for different SectorFileType in sectors which are being sealed.
 var FSOverheadSeal = map[SectorFileType]int{ // 10x overheads
-	FTUnsealed:    FSOverheadDen,
+	FTUnsealed:    0,
 	FTSealed:      FSOverheadDen,
 	FTUpdate:      FSOverheadDen,
 	FTUpdateCache: FSOverheadDen*2 + 1,
 	FTCache:       141, // 11 layers + D(2x ssize) + C + R'
-	FTPiece:       FSOverheadDen,
+	FTPiece:       0,
 	FTKey:         FSOverheadDen*11 + 1,
 }
 
@@ -101,12 +101,12 @@ var FSOverheadSeal = map[SectorFileType]int{ // 10x overheads
 // If the overhead value is not found in the map, an error is returned indicating that there is no finalized
 // overhead information for the given sector type.
 var FsOverheadFinalized = map[SectorFileType]int{
-	FTUnsealed:    FSOverheadDen,
+	FTUnsealed:    0,
 	FTSealed:      FSOverheadDen,
 	FTUpdate:      FSOverheadDen,
 	FTUpdateCache: 1,
 	FTCache:       1,
-	FTPiece:       FSOverheadDen,
+	FTPiece:       0,
 	FTKey:         FSOverheadDen,
 }
 

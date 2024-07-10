@@ -79,12 +79,14 @@ func (t *TaskStorage) HasCapacity() bool {
 		log.Errorf("finding best alloc in HasCapacity: %+v", err)
 		return false
 	}
+	//log.Infow("----HasCapacity", "paths", paths)
 
 	local, err := t.sc.sectors.localStore.Local(ctx)
 	if err != nil {
 		log.Errorf("getting local storage: %+v", err)
 		return false
 	}
+	//log.Infow("----HasCapacity", "local", local)
 
 	for _, path := range paths {
 		if t.pathType == storiface.PathStorage && !path.CanStore {

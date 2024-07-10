@@ -73,6 +73,8 @@ func (t *TreeRCTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----TreeRCTask.do", "taskID", taskID, "sref", sref)
+
 	dd, err := dealdata.DealDataSDRPoRep(ctx, t.db, t.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)
@@ -119,43 +121,37 @@ func (t *TreeRCTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.Tas
 
 	ctx := context.Background()
 
-	indIDs := make([]int64, len(ids))
-	for i, id := range ids {
-		indIDs[i] = int64(id)
-	}
-
-	err := t.db.Select(ctx, &tasks, `
-		SELECT p.task_id_tree_c, p.sp_id, p.sector_number, l.storage_id FROM sectors_sdr_pipeline p
-			INNER JOIN sector_location l ON p.sp_id = l.miner_id AND p.sector_number = l.sector_num
-			WHERE task_id_tree_r = ANY ($1) AND l.sector_filetype = 4
-`, indIDs)
-	if err != nil {
-		return nil, xerrors.Errorf("getting tasks: %w", err)
-	}
-
 	ls, err := t.sc.LocalStorage(ctx)
 	if err != nil {
 		return nil, xerrors.Errorf("getting local storage: %w", err)
 	}
 
-	acceptables := map[harmonytask.TaskID]bool{}
+	log.Debugw("----TreeRCTask.CanAccept.0", "LocalStorage", ls)
 
-	for _, t := range ids {
-		acceptables[t] = true
-	}
-
-	for _, t := range tasks {
-		if _, ok := acceptables[t.TaskID]; !ok {
+	log.Debugw("----TreeRCTask.CanAccept.0", "ids", ids)
+	for _, tid := range ids {
+		log.Debugw("----TreeRCTask.CanAccept.1", "tid", tid)
+		err := t.db.Select(ctx, &tasks, `
+				SELECT p.task_id_tree_c, p.sp_id, p.sector_number, l.storage_id FROM sectors_sdr_pipeline p
+					INNER JOIN sector_location l ON p.sp_id = l.miner_id AND p.sector_number = l.sector_num
+					WHERE task_id_tree_r = $1 AND l.sector_filetype = 4
+		`, tid)
+		if err != nil {
+			return nil, xerrors.Errorf("getting tasks: %w", err)
+		}
+		log.Debugw("----TreeRCTask.CanAccept.2", "tasks", tasks)
+		if len(tasks) != 1 {
 			continue
 		}
+		task := tasks[0]
 
 		for _, l := range ls {
-			if string(l.ID) == t.StorageID {
-				return &t.TaskID, nil
+			if l.CanSeal && string(l.ID) == task.StorageID {
+				log.Debugw("----TreeRCTask.CanAccept.3.got", "tid", tid)
+				return &tid, nil
 			}
 		}
 	}
-
 	return nil, nil
 }
 

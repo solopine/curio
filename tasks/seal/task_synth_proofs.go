@@ -60,6 +60,8 @@ func (s *SyntheticProofTask) Do(taskID harmonytask.TaskID, stillOwned func() boo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----SyntheticProofTask.do", "taskID", taskID, "sectorParams", sectorParams)
+
 	// Exit here successfully if synthetic proofs are not required
 	_, ok := abi.Synthetic[sectorParams.RegSealProof]
 	if !ok {
