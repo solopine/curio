@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
+	"github.com/solopine/txcar/txcar/parser"
 	"io"
 	"net"
 	"net/http"
@@ -34,7 +36,7 @@ import (
 	"github.com/filecoin-project/curio/market/fakelm"
 
 	lapi "github.com/filecoin-project/lotus/api"
-	"github.com/filecoin-project/lotus/build/buildconstants"
+	"github.com/filecoin-project/lotus/build"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/lib/nullreader"
 	"github.com/filecoin-project/lotus/metrics/proxy"
@@ -200,7 +202,7 @@ func ServeCurioMarketRPC(db *harmonydb.DB, full api.Chain, maddr address.Address
 		return lapi.APIVersion{
 			Version:    "curio-proxy-v0",
 			APIVersion: lapi.MinerAPIVersion0,
-			BlockDelay: buildconstants.BlockDelaySecs,
+			BlockDelay: build.BlockDelaySecs,
 		}, nil
 	}
 
@@ -248,6 +250,7 @@ func ServeCurioMarketRPC(db *harmonydb.DB, full api.Chain, maddr address.Address
 		fmt.Printf("%s request for piece from %s\n", pieceUUID, r.RemoteAddr)
 
 		pieceInfoLk.Lock()
+		log.Infow("----check.pieceInfos", "pu", pu, "len(pieceInfos)", len(pieceInfos))
 		pis, ok := pieceInfos[pu]
 		if !ok {
 			http.Error(w, "piece not found", http.StatusNotFound)
@@ -269,10 +272,15 @@ func ServeCurioMarketRPC(db *harmonydb.DB, full api.Chain, maddr address.Address
 
 		start := time.Now()
 
-		pieceData := io.LimitReader(io.MultiReader(
-			pi.data,
-			nullreader.Reader{},
-		), int64(pi.size))
+		var pieceData io.Reader
+		if pi.isTxCar {
+			pieceData = pi.data
+		} else {
+			pieceData = io.LimitReader(io.MultiReader(
+				pi.data,
+				nullreader.Reader{},
+			), int64(pi.size))
+		}
 
 		n, err := io.Copy(w, pieceData)
 		close(pi.done)
@@ -313,7 +321,8 @@ type pieceInfo struct {
 	data storiface.Data
 	size abi.UnpaddedPieceSize
 
-	done chan struct{}
+	done    chan struct{}
+	isTxCar bool
 }
 
 // A util to convert jsonrpc methods using incompatible Go types with same jsonrpc representation
@@ -371,6 +380,33 @@ type PieceIngester interface {
 
 func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *config.CurioConfig, pieceInfoLk *sync.Mutex, pieceInfos map[uuid.UUID][]pieceInfo, pin PieceIngester, db *harmonydb.DB, ssize abi.SectorSize) func(ctx context.Context, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data, deal lpiece.PieceDealInfo) (lapi.SectorOffset, error) {
 	return func(ctx context.Context, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data, deal lpiece.PieceDealInfo) (lapi.SectorOffset, error) {
+		log.Infow("----sectorAddPieceToAnyOperation.1", "PieceSize", pieceSize, "deal", deal)
+		// just if tx car
+		txPiece, err := txcar.ParseTxPieceFromDeal(deal)
+		if err != nil {
+			return lapi.SectorOffset{}, err
+		}
+		if txPiece == nil {
+			log.Infow("----deal is regular deal", "piece_cid", deal.PieceCID().String(), "err", err)
+		} else {
+			log.Infow("----deal is TX CAR deal", "piece_cid", deal.PieceCID().String())
+
+			// revert PieceActivationManifest
+			if deal.DealProposal != nil {
+				// for offline deal
+				deal.PieceActivationManifest = nil
+			} else {
+				// for ddo
+				deal.PieceActivationManifest.Notify = nil
+			}
+
+			err := txcar.AddTxPieceToDb(ctx, db, *txPiece)
+			if err != nil {
+				log.Errorw("----txcar.AddDbEntry", "piece_cid", deal.PieceCID().String(), "err", err)
+				return lapi.SectorOffset{}, xerrors.Errorf("txcar add db entry fail")
+			}
+		}
+
 		if (deal.PieceActivationManifest == nil && deal.DealProposal == nil) || (deal.PieceActivationManifest != nil && deal.DealProposal != nil) {
 			return lapi.SectorOffset{}, xerrors.Errorf("deal info must have either deal proposal or piece manifest")
 		}
@@ -391,7 +427,8 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 			data: pieceData,
 			size: pieceSize,
 
-			done: make(chan struct{}),
+			done:    make(chan struct{}),
+			isTxCar: txPiece != nil,
 		}
 
 		pieceUUID := uuid.New()
@@ -402,6 +439,7 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 
 		pieceInfoLk.Lock()
 		pieceInfos[pieceUUID] = append(pieceInfos[pieceUUID], pi)
+		log.Infow("----pieceInfos.add", "pieceUUID", pieceUUID, "pi.isTxCar", pi.isTxCar, "len(pieceInfos)", len(pieceInfos))
 		pieceInfoLk.Unlock()
 
 		// /piece?piece_cid=xxxx
@@ -486,6 +524,13 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 		pieceIDUrl := url.URL{
 			Scheme: "pieceref",
 			Opaque: fmt.Sprintf("%d", refID),
+		}
+		if txPiece != nil {
+			txCarInfoStr := parser.DeParse(*txPiece)
+			pieceIDUrl = url.URL{
+				Scheme: "txcar",
+				Opaque: txCarInfoStr,
+			}
 		}
 
 		// make a sector

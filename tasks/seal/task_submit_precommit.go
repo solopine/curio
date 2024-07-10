@@ -115,6 +115,8 @@ func (s *SubmitPrecommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----SubmitPrecommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
+
 	maddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
 	if err != nil {
 		return false, xerrors.Errorf("getting miner address: %w", err)

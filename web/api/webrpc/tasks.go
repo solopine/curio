@@ -3,6 +3,7 @@ package webrpc
 import (
 	"context"
 	"strconv"
+	"github.com/filecoin-project/go-state-types/abi"
 	"time"
 
 	"github.com/samber/lo"
@@ -24,9 +25,11 @@ type TaskSummary struct {
 	SincePostedStr string `db:"-"`
 
 	Miner string
+	Sector         string `db:"-"`
 }
 
 func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) {
+	//log.Infow("----ClusterTaskSummary.before")
 	var ts = []TaskSummary{}
 	err := a.deps.DB.Select(ctx, &ts, `SELECT 
 		t.id as id, t.name as name, t.update_time as since_posted, t.owner_id as owner_id, hm.host_and_port as owner
@@ -61,13 +64,25 @@ func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) 
 				ts[i].Miner = ""
 			}
 		}
+		if v, ok := a.sectorIDs[ts[i].Name]; ok {
+			sid, err := v.GetSectorID(a.deps.DB, ts[i].ID)
+			if err != nil {
+				log.Warnw("GetSectorID", "taskId", ts[i].ID)
+			} else {
+				ts[i].Sector = sid.Number.String()
+			}
+		}
 	}
-
+	//log.Infow("----ClusterTaskSummary.after", "ts", len(ts))
 	return ts, nil
 }
 
 type SpidGetter interface {
 	GetSpid(db *harmonydb.DB, taskID int64) string
+}
+
+type SectorIDGetter interface {
+	GetSectorID(db *harmonydb.DB, taskID int64) (*abi.SectorID, error)
 }
 
 func makeTaskSPIDs() map[string]SpidGetter {
@@ -81,4 +96,17 @@ func makeTaskSPIDs() map[string]SpidGetter {
 		spids[ttd.Name] = t.(SpidGetter)
 	}
 	return spids
+}
+
+func makeTaskSectorIDs() map[string]SectorIDGetter {
+	sectorIdGetters := lo.Filter(lo.Values(harmonytask.Registry), func(t harmonytask.TaskInterface, _ int) bool {
+		_, ok := t.(SectorIDGetter)
+		return ok
+	})
+	sectorIds := make(map[string]SectorIDGetter)
+	for _, t := range sectorIdGetters {
+		ttd := t.TypeDetails()
+		sectorIds[ttd.Name] = t.(SectorIDGetter)
+	}
+	return sectorIds
 }

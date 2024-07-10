@@ -39,7 +39,7 @@ import (
 	"github.com/filecoin-project/lotus/api/v1api"
 	miner2 "github.com/filecoin-project/lotus/chain/actors/builtin/miner"
 	"github.com/filecoin-project/lotus/chain/types"
-	"github.com/filecoin-project/lotus/cli/spcli/createminer"
+	createminer "github.com/filecoin-project/lotus/cli/spcli"
 	"github.com/filecoin-project/lotus/itests/kit"
 	"github.com/filecoin-project/lotus/node"
 )
