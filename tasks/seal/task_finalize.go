@@ -2,6 +2,7 @@ package seal
 
 import (
 	"context"
+	"net/url"
 
 	"golang.org/x/xerrors"
 
@@ -67,6 +68,19 @@ func (f *FinalizeTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 
 	if err := f.db.QueryRow(ctx, `SELECT COALESCE(BOOL_OR(NOT data_delete_on_finalize), FALSE) FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&keepUnsealed); err != nil {
 		return false, err
+	}
+
+	var dataUrl string
+	if err := f.db.QueryRow(ctx, `SELECT data_url FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&dataUrl); err != nil {
+		return false, err
+	}
+	goUrl, err := url.Parse(dataUrl)
+	if err != nil {
+		return false, err
+	}
+
+	if goUrl.Scheme == "txcar" {
+		keepUnsealed = false
 	}
 
 	sector := storiface.SectorRef{

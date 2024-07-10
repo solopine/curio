@@ -16,8 +16,6 @@ import (
 	"github.com/filecoin-project/curio/harmony/resources"
 	"github.com/filecoin-project/curio/lib/dealdata"
 	ffi2 "github.com/filecoin-project/curio/lib/ffi"
-	"github.com/filecoin-project/curio/lib/paths"
-
 	"github.com/filecoin-project/lotus/chain/actors/policy"
 	"github.com/filecoin-project/lotus/chain/types"
 	"github.com/filecoin-project/lotus/storage/sealer/storiface"
@@ -174,7 +172,7 @@ func (s *SDRTask) TypeDetails() harmonytask.TaskTypeDetails {
 			Cpu:     4, // todo multicore sdr
 			Gpu:     0,
 			Ram:     (64 << 30) + (256 << 20),
-			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, paths.MinFreeStoragePercentage),
+			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, 50),
 		},
 		MaxFailures: 2,
 		Follows:     nil,

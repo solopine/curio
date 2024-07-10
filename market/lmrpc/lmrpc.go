@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"io"
 	"net"
 	"net/http"
@@ -320,6 +321,20 @@ type PieceIngester interface {
 
 func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *config.CurioConfig, pieceInfoLk *sync.Mutex, pieceInfos map[uuid.UUID][]pieceInfo, pin PieceIngester, db *harmonydb.DB, ssize abi.SectorSize) func(ctx context.Context, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data, deal lpiece.PieceDealInfo) (lapi.SectorOffset, error) {
 	return func(ctx context.Context, pieceSize abi.UnpaddedPieceSize, pieceData storiface.Data, deal lpiece.PieceDealInfo) (lapi.SectorOffset, error) {
+		log.Infow("----sectorAddPieceToAnyOperation.1", "PieceSize", pieceSize, "deal", deal)
+		// just if tx car
+		isTxCar := true
+		txCarInfo, err := txcar.ParseTxCarInfoFromDeal(deal)
+		if err != nil {
+			isTxCar = false
+			log.Infow("----deal is regular DDO", "piece_cid", deal.PieceCID().String())
+		} else {
+			isTxCar = true
+			log.Infow("----deal is TX CAR DDO", "piece_cid", deal.PieceCID().String())
+			// revert PieceActivationManifest.Notify
+			deal.PieceActivationManifest.Notify = nil
+		}
+
 		if (deal.PieceActivationManifest == nil && deal.DealProposal == nil) || (deal.PieceActivationManifest != nil && deal.DealProposal != nil) {
 			return lapi.SectorOffset{}, xerrors.Errorf("deal info must have either deal proposal or piece manifest")
 		}
@@ -435,6 +450,13 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 		pieceIDUrl := url.URL{
 			Scheme: "pieceref",
 			Opaque: fmt.Sprintf("%d", refID),
+		}
+		if isTxCar {
+			txCarInfoStr := txcar.EncodeTxCarInfo(txCarInfo)
+			pieceIDUrl = url.URL{
+				Scheme: "txcar",
+				Opaque: txCarInfoStr,
+			}
 		}
 
 		// make a sector

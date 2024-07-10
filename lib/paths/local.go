@@ -518,7 +518,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 
 		resID := sectorFile{sid.ID, fileType}
 
-		log.Debugw("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved+overhead)
+		log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved+overhead)
 
 		p.reserved += overhead
 		p.reservations[resID] = overhead
@@ -528,7 +528,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			old_r()
 			st.localLk.Lock()
 			defer st.localLk.Unlock()
-			log.Debugw("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved-overhead)
+			log.Infow("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved-overhead)
 			p.reserved -= overhead
 			delete(p.reservations, resID)
 		}
@@ -644,6 +644,7 @@ func (st *Local) AcquireSector(ctx context.Context, sid storiface.SectorRef, exi
 		}
 
 		sis, err := st.index.StorageBestAlloc(ctx, fileType, ssize, pathType, sid.ID.Miner)
+		log.Infow("----local.AcquireSector", "sid", sid.ID, "fileType", fileType, "pathType", pathType, "sis", sis, "st.paths", st.paths)
 		if err != nil {
 			return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("finding best storage for allocating : %w", err)
 		}

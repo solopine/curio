@@ -487,7 +487,10 @@ func (r *Remote) readRemote(ctx context.Context, url string, offset, size abi.Pa
 	if r.auth != nil {
 		req.Header = r.auth.Clone()
 	}
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+size-1))
+	if size > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+size-1))
+	}
+
 	req = req.WithContext(ctx)
 
 	resp, err := http.DefaultClient.Do(req)
@@ -771,11 +774,12 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 // ReaderSeq creates a simple sequential reader for a file. Does not work for
 // file types which are a directory (e.g. FTCache).
 func (r *Remote) ReaderSeq(ctx context.Context, s storiface.SectorRef, ft storiface.SectorFileType) (io.ReadCloser, error) {
+	log.Infow("----ReaderSeq", "s", s, "ft", ft)
 	paths, _, err := r.local.AcquireSector(ctx, s, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
 	if err != nil {
 		return nil, xerrors.Errorf("acquire local: %w", err)
 	}
-
+	log.Infow("----ReaderSeq.1", "paths", paths)
 	path := storiface.PathByType(paths, ft)
 	if path != "" {
 		return os.Open(path)
@@ -794,6 +798,7 @@ func (r *Remote) ReaderSeq(ctx context.Context, s storiface.SectorRef, ft storif
 	sort.Slice(si, func(i, j int) bool {
 		return si[i].Weight > si[j].Weight
 	})
+	log.Infow("----ReaderSeq.2", "si", si)
 
 	for _, info := range si {
 		for _, url := range info.URLs {

@@ -320,7 +320,9 @@ func (e *TaskEngine) pollerTryAllWork() bool {
 		e.lastCleanup.Store(time.Now())
 		resources.CleanupMachines(e.ctx, e.db)
 	}
+
 	for _, v := range e.handlers {
+		log.Infow("----pollerTryAllWork", "handler", v.Name)
 		if err := v.AssertMachineHasCapacity(); err != nil {
 			log.Debugf("skipped scheduling %s type tasks on due to %s", v.Name, err.Error())
 			continue
@@ -334,8 +336,10 @@ func (e *TaskEngine) pollerTryAllWork() bool {
 			log.Error("Unable to read work ", err)
 			continue
 		}
+		log.Infow("----pollerTryAllWork", "len(unownedTasks)", len(unownedTasks))
 		if len(unownedTasks) > 0 {
 			accepted := v.considerWork(WorkSourcePoller, unownedTasks)
+			log.Infow("----pollerTryAllWork", "accepted", accepted)
 			if accepted {
 				return true // accept new work slowly and in priority order
 			}
