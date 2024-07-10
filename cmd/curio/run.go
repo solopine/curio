@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -103,6 +104,7 @@ var runCmd = &cli.Command{
 			ctx, ctxclose = context.WithCancel(ctx)
 			go func() {
 				<-shutdownChan
+				log.Warnw("shutdownChan received...")
 				ctxclose()
 			}()
 		}
@@ -124,6 +126,7 @@ var runCmd = &cli.Command{
 
 		go ffiSelfTest() // Panics on failure
 
+		time.Sleep(10 * time.Second)
 		taskEngine, err := tasks.StartTasks(ctx, dependencies)
 
 		if err != nil {

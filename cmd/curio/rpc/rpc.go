@@ -250,7 +250,7 @@ func (p *CurioAPI) LogSetLevel(ctx context.Context, subsystem, level string) err
 }
 
 func ListenAndServe(ctx context.Context, dependencies *deps.Deps, shutdownChan chan struct{}) error {
-	fh := &paths.FetchHandler{Local: dependencies.LocalStore, PfHandler: &paths.DefaultPartialFileHandler{}}
+	fh := &paths.FetchHandler{Local: dependencies.LocalStore, PfHandler: &paths.DefaultPartialFileHandler{}, DB: dependencies.DB}
 	remoteHandler := func(w http.ResponseWriter, r *http.Request) {
 		if !auth.HasPerm(r.Context(), nil, lapi.PermAdmin) {
 			w.WriteHeader(401)

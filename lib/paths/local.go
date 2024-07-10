@@ -78,6 +78,8 @@ type path struct {
 
 	reserved     int64
 	reservations map[sectorFile]int64
+
+	canStore bool
 }
 
 // statExistingSectorForReservation is optional parameter for stat method
@@ -87,6 +89,15 @@ type statExistingSectorForReservation struct {
 	id       abi.SectorID
 	ft       storiface.SectorFileType
 	overhead int64
+}
+
+func (p *path) diskUsage(ls LocalStorage, path string) (int64, error) {
+	if p.canStore {
+		log.Debugw("diskUsage for canStore, just return 0", "path", path)
+		return 0, nil
+	} else {
+		return ls.DiskUsage(path)
+	}
 }
 
 func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservation) (stat fsutil.FsStat, newResvOnDisk int64, err error) {
@@ -103,16 +114,16 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	accountExistingFiles := func(id abi.SectorID, fileType storiface.SectorFileType, overhead int64) (int64, error) {
 		sp := p.sectorPath(id, fileType)
 
-		used, err := ls.DiskUsage(sp)
+		used, err := p.diskUsage(ls, sp)
 		if err == os.ErrNotExist {
-			used, err = ls.DiskUsage(sp + storiface.TempSuffix)
+
+			used, err = p.diskUsage(ls, sp+storiface.TempSuffix)
 			if err == os.ErrNotExist {
-				p, ferr := tempFetchDest(sp, false)
+				p1, ferr := tempFetchDest(sp, false)
 				if ferr != nil {
 					return 0, ferr
 				}
-
-				used, err = ls.DiskUsage(p)
+				used, err = p.diskUsage(ls, p1)
 			}
 		}
 		if err != nil {
@@ -125,7 +136,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			return 0, nil
 		}
 
-		log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
+		//log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
 		return used, nil
 	}
 
@@ -143,7 +154,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	}
 	for _, reservation := range newReserve {
 		for _, fileType := range reservation.ft.AllSet() {
-			log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
+			//log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
 
 			resID := sectorFile{reservation.id, fileType}
 
@@ -186,7 +197,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	}
 
 	if p.maxStorage > 0 {
-		used, err := ls.DiskUsage(p.local)
+		used, err := p.diskUsage(ls, p.local)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
@@ -258,6 +269,7 @@ func (st *Local) OpenPath(ctx context.Context, p string) error {
 		maxStorage:   meta.MaxStorage,
 		reserved:     0,
 		reservations: map[sectorFile]int64{},
+		canStore:     meta.CanStore,
 	}
 
 	fst, _, err := out.stat(st.localStorage)
@@ -506,6 +518,7 @@ func (st *Local) reportStorage(ctx context.Context) {
 			log.Warnf("error reporting storage health for %s (%+v): %+v", id, report, err)
 		}
 	}
+	//log.Infow("----reportStorage", "now", time.Now(), "toReport", toReport)
 }
 
 func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storiface.SectorFileType,
@@ -563,7 +576,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 
 		resID := sectorFile{sid.ID, fileType}
 
-		log.Debugw("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved+overhead)
+		log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved+overhead)
 
 		p.reserved += overhead
 		p.reservations[resID] = overhead
@@ -573,7 +586,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			old_r()
 			st.localLk.Lock()
 			defer st.localLk.Unlock()
-			log.Debugw("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved-overhead)
+			log.Infow("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.reserved, "reserved-after", p.reserved-overhead)
 			p.reserved -= overhead
 			delete(p.reservations, resID)
 		}
@@ -689,6 +702,7 @@ func (st *Local) AcquireSector(ctx context.Context, sid storiface.SectorRef, exi
 		}
 
 		sis, err := st.index.StorageBestAlloc(ctx, fileType, ssize, pathType, sid.ID.Miner)
+		log.Infow("----local.AcquireSector", "sid", sid.ID, "fileType", fileType, "pathType", pathType, "sis", sis, "st.paths", st.paths)
 		if err != nil {
 			return storiface.SectorPaths{}, storiface.SectorPaths{}, xerrors.Errorf("finding best storage for allocating : %w", err)
 		}
@@ -754,11 +768,15 @@ func (st *Local) Local(ctx context.Context) ([]storiface.StoragePath, error) {
 		}
 
 		out = append(out, storiface.StoragePath{
-			ID:        id,
-			Weight:    si.Weight,
-			LocalPath: p.local,
-			CanSeal:   si.CanSeal,
-			CanStore:  si.CanStore,
+			ID:          id,
+			Weight:      si.Weight,
+			LocalPath:   p.local,
+			CanSeal:     si.CanSeal,
+			CanStore:    si.CanStore,
+			AllowTypes:  si.AllowTypes,
+			DenyTypes:   si.DenyTypes,
+			AllowMiners: si.AllowMiners,
+			DenyMiners:  si.DenyMiners,
 		})
 	}
 
@@ -798,6 +816,7 @@ storeLoop:
 }
 
 func (st *Local) RemoveCopies(ctx context.Context, sid abi.SectorID, typ storiface.SectorFileType) error {
+	log.Debugw("RemoveCopies called", "sid", sid, "type", typ)
 	if bits.OnesCount(uint(typ)) != 1 {
 		return xerrors.New("delete expects one file type")
 	}
@@ -824,6 +843,7 @@ func (st *Local) RemoveCopies(ctx context.Context, sid abi.SectorID, typ storifa
 		if info.Primary {
 			continue
 		}
+		log.Debugw("RemoveCopies for si", "sid", sid, "type", typ, "si.info", info)
 
 		if err := st.removeSector(ctx, sid, typ, info.ID); err != nil {
 			return err
@@ -860,6 +880,7 @@ func (st *Local) removeSector(ctx context.Context, sid abi.SectorID, typ storifa
 }
 
 func (st *Local) MoveStorage(ctx context.Context, s storiface.SectorRef, types storiface.SectorFileType, opts ...storiface.AcquireOption) error {
+	log.Infow("local.MoveStorage", "s", s, "types", types)
 	settings := storiface.AcquireSettings{
 		// If into is nil then we're expecting the data to be there already, but make sure here
 		Into: nil,
@@ -867,6 +888,7 @@ func (st *Local) MoveStorage(ctx context.Context, s storiface.SectorRef, types s
 	for _, o := range opts {
 		o(&settings)
 	}
+	log.Infow("local.MoveStorage.settings", "s", s, "types", types, "settings", settings)
 
 	var err error
 	var dest, destIds storiface.SectorPaths
@@ -911,17 +933,17 @@ func (st *Local) MoveStorage(ctx context.Context, s storiface.SectorRef, types s
 
 		log.Debugf("moving %v(%d) to storage: %s(se:%t; st:%t) -> %s(se:%t; st:%t)", s, fileType, sst.ID, sst.CanSeal, sst.CanStore, dst.ID, dst.CanSeal, dst.CanStore)
 
-		if err := st.index.StorageDropSector(ctx, storiface.ID(storiface.PathByType(srcIds, fileType)), s.ID, fileType); err != nil {
-			return xerrors.Errorf("dropping source sector from index: %w", err)
-		}
-
 		if err := Move(storiface.PathByType(src, fileType), storiface.PathByType(dest, fileType)); err != nil {
 			// TODO: attempt some recovery (check if src is still there, re-declare)
 			return xerrors.Errorf("moving sector %v(%d): %w", s, fileType, err)
 		}
-
+		log.Debugf("moved %v(%d) to storage: %s(se:%t; st:%t) -> %s(se:%t; st:%t)", s, fileType, sst.ID, sst.CanSeal, sst.CanStore, dst.ID, dst.CanSeal, dst.CanStore)
 		if err := st.index.StorageDeclareSector(ctx, storiface.ID(storiface.PathByType(destIds, fileType)), s.ID, fileType, true); err != nil {
 			return xerrors.Errorf("declare sector %d(t:%d) -> %s: %w", s, fileType, storiface.ID(storiface.PathByType(destIds, fileType)), err)
+		}
+
+		if err := st.index.StorageDropSector(ctx, storiface.ID(storiface.PathByType(srcIds, fileType)), s.ID, fileType); err != nil {
+			return xerrors.Errorf("dropping source sector from index: %w", err)
 		}
 	}
 

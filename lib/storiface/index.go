@@ -131,4 +131,9 @@ type StoragePath struct {
 
 	CanSeal  bool
 	CanStore bool
+
+	AllowTypes  []string
+	DenyTypes   []string
+	AllowMiners []string
+	DenyMiners  []string
 }

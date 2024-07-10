@@ -142,6 +142,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		if err != nil {
 			return false, xerrors.Errorf("getting nonce from mpool: %w", err)
 		}
+		log.Infow("----MpoolGetNonce", "msgNonce", msgNonce)
 
 		// get nonce from db
 		var dbNonce *uint64
@@ -150,12 +151,14 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		if err := r.Scan(&dbNonce); err != nil {
 			return false, xerrors.Errorf("getting nonce from db: %w", err)
 		}
+		log.Infow("----QueryRow.dbNonce", "*dbNonce", *dbNonce)
 
 		if dbNonce != nil && *dbNonce+1 > msgNonce {
 			msgNonce = *dbNonce + 1
 		}
 
 		msg.Nonce = msgNonce
+		log.Infow("----after.QueryRow.dbNonce", "msg.Nonce", msg.Nonce)
 
 		// sign message
 		sigMsg, err = s.signer.WalletSignMessage(ctx, msg.From, &msg)
@@ -174,7 +177,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		}
 
 		// write to db
-
+		log.Infow("----before.db.exec", "msg.Nonce", msg.Nonce, "signed_cid", sigMsg.Cid().String(), "taskID", taskID)
 		n, err := s.db.Exec(ctx, `
 			UPDATE message_sends SET nonce = $1, signed_data = $2, signed_json = $3, signed_cid = $4 
 			WHERE send_task_id = $5`,
@@ -186,6 +189,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 			log.Errorw("updating db record: expected 1 row to be affected, got %d", n)
 			return false, xerrors.Errorf("updating db record: expected 1 row to be affected, got %d", n)
 		}
+		log.Infow("----after.db.exec", "msg.Nonce", msg.Nonce, "signed_cid", sigMsg.Cid().String(), "taskID", taskID, "n", n)
 	} else {
 		// Note: this handles an unlikely edge-case:
 		// We have previously signed the message but either failed to send it or failed to update the db
@@ -203,6 +207,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 
 	// send!
 	_, err = s.api.MpoolPush(ctx, sigMsg)
+	log.Infow("----after.MpoolPush", "taskID", taskID)
 
 	// persist send result
 	var sendSuccess = err == nil
@@ -211,6 +216,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		sendError = err.Error()
 	}
 
+	log.Infow("----before.db.exec2", "sendSuccess", sendSuccess, "sendError", sendError, "taskID", taskID)
 	_, err = s.db.Exec(ctx, `
 		UPDATE message_sends SET send_success = $1, send_error = $2, send_time = CURRENT_TIMESTAMP 
 		WHERE send_task_id = $3`, sendSuccess, sendError, taskID)
@@ -218,6 +224,7 @@ func (s *SendTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		return false, xerrors.Errorf("updating db record: %w", err)
 	}
 
+	log.Infow("----after.db.exec2", "sendSuccess", sendSuccess, "sendError", sendError, "taskID", taskID)
 	return true, nil
 }
 

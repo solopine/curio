@@ -2,6 +2,7 @@ package seal
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
 	"net/url"
 	"strconv"
 
@@ -44,6 +45,26 @@ func DropSectorPieceRefs(ctx context.Context, db *harmonydb.DB, sid abi.SectorID
 			}
 
 			log.Debugw("deleted piece ref", "url", pu.URL, "miner", sid.Miner, "sector", sid.Number, "rows", n)
+		}
+		if gourl.Scheme == "txcar" {
+			txCarInfoStr := gourl.Opaque
+			txPiece, err := txcar.ParseTxPiece(txCarInfoStr)
+			if err != nil {
+				log.Errorw("---DropSectorPieceRefs.ParseTxPiece", "txCarInfoStr", txCarInfoStr)
+				continue
+			}
+			if txPiece == nil {
+				log.Errorw("---DropSectorPieceRefs.ParseTxPiece is nil", "txCarInfoStr", txCarInfoStr)
+				continue
+			}
+
+			n, err := db.Exec(ctx, `DELETE FROM parked_piece_refs WHERE piece_id in (select id from parked_pieces where piece_cid=$1)`, txPiece.PieceCid.String())
+			if err != nil {
+				log.Errorw("---failed to delete piece ref", "url", pu.URL, "error", err, "miner", sid.Miner, "sector", sid.Number)
+				continue
+			}
+
+			log.Debugw("---deleted piece ref", "url", pu.URL, "miner", sid.Miner, "sector", sid.Number, "rows", n)
 		}
 	}
 

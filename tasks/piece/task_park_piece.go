@@ -3,6 +3,9 @@ package piece
 import (
 	"context"
 	"encoding/json"
+	"github.com/filecoin-project/curio/txcar"
+	"io"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -155,20 +158,38 @@ func (p *ParkPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (d
 		return false, xerrors.Errorf("parsing piece raw size: %w", err)
 	}
 
+	isTxCar, err := txcar.IsTxPieceStr(ctx, p.db, pieceData.PieceCID)
+	if err != nil {
+		return false, xerrors.Errorf("IsTxCarPieceStr: %w", err)
+	}
+	log.Infow("ParkPieceTask", "isTxCar", isTxCar, "piece_cid", pieceData.PieceCID, "refData", refData)
+
 	var merr error
 
 	for i := range refData {
 		if refData[i].DataURL != "" {
-			upr := dealdata.NewUrlReader(refData[i].DataURL, pieceRawSize)
-			defer func() {
-				_ = upr.Close()
-			}()
+			if isTxCar {
+				resp, err := http.Get(refData[i].DataURL)
+				if err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("http.Get: %w", err))
+					continue
+				}
 
-			pnum := storiface.PieceNumber(pieceData.PieceID)
+				if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("io.Copy: %w", err))
+					continue
+				}
+			} else {
+				upr := dealdata.NewUrlReader(refData[i].DataURL, pieceRawSize)
+				defer func() {
+					_ = upr.Close()
+				}()
+				pnum := storiface.PieceNumber(pieceData.PieceID)
 
-			if err := p.sc.WritePiece(ctx, &taskID, pnum, pieceRawSize, upr); err != nil {
-				merr = multierror.Append(merr, xerrors.Errorf("write piece: %w", err))
-				continue
+				if err := p.sc.WritePiece(ctx, &taskID, pnum, pieceRawSize, upr); err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("write piece: %w", err))
+					continue
+				}
 			}
 
 			// Update the piece as complete after a successful write.
@@ -191,7 +212,7 @@ func (p *ParkPieceTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.
 }
 
 func (p *ParkPieceTask) TypeDetails() harmonytask.TaskTypeDetails {
-	const maxSizePiece = 64 << 30
+	const maxSizePiece = 64 << 10 // for txcar
 
 	return harmonytask.TaskTypeDetails{
 		Max:  taskhelp.Max(p.max),

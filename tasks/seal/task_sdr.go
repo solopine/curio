@@ -3,7 +3,8 @@ package seal
 import (
 	"bytes"
 	"context"
-
+	"encoding/hex"
+	"github.com/filecoin-project/curio/lib/paths"
 	"golang.org/x/xerrors"
 
 	"github.com/filecoin-project/go-address"
@@ -17,9 +18,9 @@ import (
 	"github.com/filecoin-project/curio/harmony/taskhelp"
 	"github.com/filecoin-project/curio/lib/dealdata"
 	ffi2 "github.com/filecoin-project/curio/lib/ffi"
-	"github.com/filecoin-project/curio/lib/paths"
 	storiface "github.com/filecoin-project/curio/lib/storiface"
 
+	addr "github.com/filecoin-project/go-address"
 	"github.com/filecoin-project/lotus/chain/actors/policy"
 	"github.com/filecoin-project/lotus/chain/types"
 )
@@ -62,16 +63,18 @@ func NewSDRTask(api SDRAPI, db *harmonydb.DB, sp *SealPoller, sc *ffi2.SealCalls
 }
 
 func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bool, err error) {
+	log.Infow("----sdr.do", "taskID", taskID)
 	ctx := context.Background()
 
 	var sectorParamsArr []struct {
 		SpID         int64                   `db:"sp_id"`
 		SectorNumber int64                   `db:"sector_number"`
 		RegSealProof abi.RegisteredSealProof `db:"reg_seal_proof"`
+		TicketEpoch  *abi.ChainEpoch         `db:"ticket_epoch"`
 	}
 
 	err = s.db.Select(ctx, &sectorParamsArr, `
-		SELECT sp_id, sector_number, reg_seal_proof
+		SELECT sp_id, sector_number, reg_seal_proof, ticket_epoch
 		FROM sectors_sdr_pipeline
 		WHERE task_id_sdr = $1`, taskID)
 	if err != nil {
@@ -83,6 +86,7 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----sdr.do.1", "taskID", taskID, "sectorParams", sectorParams)
 	dealData, err := dealdata.DealDataSDRPoRep(ctx, s.db, s.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)
@@ -96,18 +100,33 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 		ProofType: sectorParams.RegSealProof,
 	}
 
+	log.Infow("----sdr.do.2", "taskID", taskID, "sref", sref, "dealData.CommD", dealData.CommD.String(), "dealData.IsUnpadded", dealData.IsUnpadded, "dealData.KeepUnsealed", dealData.KeepUnsealed)
 	// get ticket
 	maddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
 	if err != nil {
 		return false, xerrors.Errorf("getting miner address: %w", err)
 	}
 
-	// FAIL: api may be down
-	// FAIL-RESP: rely on harmony retry
-	ticket, ticketEpoch, err := GetTicket(ctx, s.api, maddr)
-	if err != nil {
-		return false, xerrors.Errorf("getting ticket: %w", err)
+	var ticket abi.SealRandomness
+	var ticketEpoch abi.ChainEpoch
+	if sectorParams.TicketEpoch == nil {
+		// FAIL: api may be down
+		// FAIL-RESP: rely on harmony retry
+		ticket, ticketEpoch, err = GetTicket(ctx, s.api, maddr)
+		if err != nil {
+			return false, xerrors.Errorf("getting ticket: %w", err)
+		}
+	} else {
+		ticketEpoch = *sectorParams.TicketEpoch
+		log.Infow("----sdr.do.2.5 already have ticket", "ticketEpoch", ticketEpoch)
+
+		ticket, err = getTicketFromEpoch(ctx, s.api, maddr, ticketEpoch)
+		if err != nil {
+			return false, xerrors.Errorf("getTicketFromEpoch ticket: %w", err)
+		}
 	}
+
+	log.Infow("----sdr.do.3", "taskID", taskID, "sref", sref, "ticketEpoch", ticketEpoch, "ticket", hex.EncodeToString(ticket))
 
 	// do the SDR!!
 
@@ -123,6 +142,8 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	if err != nil {
 		return false, xerrors.Errorf("generating sdr: %w", err)
 	}
+
+	log.Infow("----sdr.do.4.done", "taskID", taskID, "sref", sref)
 
 	// store success!
 	n, err := s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline
@@ -164,14 +185,76 @@ func GetTicket(ctx context.Context, api TicketNodeAPI, maddr address.Address) (a
 	return abi.SealRandomness(rand), ticketEpoch, nil
 }
 
-func (s *SDRTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.TaskEngine) (*harmonytask.TaskID, error) {
-	if s.min > len(ids) {
-		log.Debugw("did not accept task", "name", "SDR", "reason", "below min", "min", s.min, "count", len(ids))
+func (t *SDRTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.TaskEngine) (*harmonytask.TaskID, error) {
+	if t.min > len(ids) {
+		log.Debugw("did not accept task", "name", "SDR", "reason", "below min", "min", t.min, "count", len(ids))
 		return nil, nil
 	}
 
-	id := ids[0]
-	return &id, nil
+	ctx := context.Background()
+	ls, err := t.sc.LocalStorage(ctx)
+	if err != nil {
+		return nil, xerrors.Errorf("getting local storage: %w", err)
+	}
+	log.Infow("----sdr.CanAccept.LocalStorage", "ls", ls)
+	for _, id := range ids {
+		s, err := t.taskToSector(id)
+		log.Infow("----sdr.CanAccept", "s", s, "TaskId", id)
+		if err != nil {
+			continue
+		}
+		var storageIds []string
+		err = t.db.Select(ctx, &storageIds, `SELECT storage_id FROM sector_location WHERE miner_id=$1 AND sector_num=$2 AND sector_filetype=$3`,
+			s.SpID, s.SectorNumber, storiface.FTCache)
+		if err != nil {
+			return nil, xerrors.Errorf("getting sector id from db: %w", err)
+		}
+		log.Infow("----sdr.CanAccept.Select", "storageIds", storageIds)
+		if len(storageIds) == 0 {
+			log.Infow("----sdr.CanAccept.newly", "s", s, "TaskId", id)
+			for _, localStoragePath := range ls {
+				if localStoragePath.CanSeal {
+					ok, err := allocPathOk(localStoragePath.AllowTypes, localStoragePath.DenyTypes, localStoragePath.AllowMiners, localStoragePath.DenyMiners, storiface.FTCache, s.ID().Miner)
+					if err != nil {
+						return nil, xerrors.Errorf("allocPathOk: %w", err)
+					}
+					if ok {
+						return &id, nil
+					}
+				}
+			}
+			log.Infow("----sdr.CanAccept.newly but no local storage for miner", "s", s, "TaskId", id)
+			continue
+		}
+
+		log.Infow("----sdr.CanAccept.existed", "s", s, "TaskId", id)
+		for _, localStoragePath := range ls {
+			if localStoragePath.CanSeal {
+				for _, storageId := range storageIds {
+					if storageId == string(localStoragePath.ID) {
+						return &id, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, xerrors.Errorf("Can NOT accept SDR")
+}
+
+func allocPathOk(allowTypes, denyTypes, allowMiners, denyMiners []string, fileType storiface.SectorFileType, miner abi.ActorID) (bool, error) {
+	if !fileType.Allowed(allowTypes, denyTypes) {
+		return false, nil
+	}
+	proceed, _, err := paths.MinerFilter(allowMiners, denyMiners, miner)
+	if err != nil {
+		return false, err
+	}
+	if !proceed {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (s *SDRTask) TypeDetails() harmonytask.TaskTypeDetails {
@@ -187,7 +270,7 @@ func (s *SDRTask) TypeDetails() harmonytask.TaskTypeDetails {
 			Cpu:     4, // todo multicore sdr
 			Gpu:     0,
 			Ram:     (64 << 30) + (256 << 20),
-			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, paths.MinFreeStoragePercentage),
+			Storage: s.sc.Storage(s.taskToSector, storiface.FTCache, storiface.FTNone, ssize, storiface.PathSealing, 50),
 		},
 		MaxFailures: 2,
 		Follows:     nil,
@@ -241,6 +324,25 @@ func (s *SDRTask) taskToSector(id harmonytask.TaskID) (ffi2.SectorRef, error) {
 	}
 
 	return refs[0], nil
+}
+
+func getTicketFromEpoch(ctx context.Context, api TicketNodeAPI, maddr addr.Address, ticketEpoch abi.ChainEpoch) (abi.SealRandomness, error) {
+	ts, err := api.ChainHead(ctx)
+	if err != nil {
+		return nil, xerrors.Errorf("getting chain head: %w", err)
+	}
+
+	buf := new(bytes.Buffer)
+	if err := maddr.MarshalCBOR(buf); err != nil {
+		return nil, xerrors.Errorf("marshaling miner address: %w", err)
+	}
+
+	rand, err := api.StateGetRandomnessFromTickets(ctx, crypto.DomainSeparationTag_SealRandomness, ticketEpoch, buf.Bytes(), ts.Key())
+	if err != nil {
+		return nil, xerrors.Errorf("getting randomness from tickets: %w", err)
+	}
+
+	return abi.SealRandomness(rand), nil
 }
 
 var _ harmonytask.TaskInterface = &SDRTask{}

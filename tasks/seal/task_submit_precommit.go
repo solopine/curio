@@ -3,6 +3,7 @@ package seal
 import (
 	"bytes"
 	"context"
+	"strings"
 
 	"github.com/ipfs/go-cid"
 	"golang.org/x/xerrors"
@@ -42,6 +43,7 @@ type SubmitPrecommitTask struct {
 	sp                         *SealPoller
 	db                         *harmonydb.DB
 	api                        SubmitPrecommitTaskApi
+	fullApi                    api.FullNode
 	sender                     *message.Sender
 	as                         *multictladdr.MultiAddressSelector
 	CollateralFromMinerBalance bool
@@ -50,13 +52,14 @@ type SubmitPrecommitTask struct {
 	maxFee types.FIL
 }
 
-func NewSubmitPrecommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitPrecommitTaskApi, sender *message.Sender, as *multictladdr.MultiAddressSelector, maxFee types.FIL, CollateralFromMinerBalance, DisableCollateralFallback bool) *SubmitPrecommitTask {
+func NewSubmitPrecommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitPrecommitTaskApi, sender *message.Sender, as *multictladdr.MultiAddressSelector, maxFee types.FIL, CollateralFromMinerBalance, DisableCollateralFallback bool, fullApi api.FullNode) *SubmitPrecommitTask {
 	return &SubmitPrecommitTask{
-		sp:     sp,
-		db:     db,
-		api:    api,
-		sender: sender,
-		as:     as,
+		sp:      sp,
+		db:      db,
+		api:     api,
+		fullApi: fullApi,
+		sender:  sender,
+		as:      as,
 
 		maxFee:                     maxFee,
 		CollateralFromMinerBalance: CollateralFromMinerBalance,
@@ -114,6 +117,8 @@ func (s *SubmitPrecommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bo
 		return false, xerrors.Errorf("expected 1 sector params, got %d", len(sectorParamsArr))
 	}
 	sectorParams := sectorParamsArr[0]
+
+	log.Infow("----SubmitPrecommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
 
 	maddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
 	if err != nil {
@@ -284,7 +289,19 @@ func (s *SubmitPrecommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bo
 
 	mcid, err := s.sender.Send(ctx, msg, mss, "precommit")
 	if err != nil {
-		return false, xerrors.Errorf("sending message: %w", err)
+		if !strings.Contains(err.Error(), "already allocated") {
+			return false, xerrors.Errorf("sending message: %w", err)
+		}
+
+		var err1 error
+		mcid, err1 = s.queryPreCommitMessageCid(ctx, maddr, params.Sectors[0].SectorNumber)
+		if err1 != nil {
+			return false, xerrors.Errorf("pushing message to mpool: err:%w. err1:%w", err, err1)
+		}
+		if mcid == cid.Undef {
+			return false, xerrors.Errorf("sending message (mcid == nil): %w", err)
+		}
+		log.Warnw("----SubmitPrecommitTask already precommit", "sp", maddr.String(), "sector", params.Sectors[0].SectorNumber)
 	}
 
 	// set precommit_msg_cid
@@ -301,6 +318,52 @@ func (s *SubmitPrecommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bo
 	}
 
 	return true, nil
+}
+
+// when cid.Undef and err == nil, mean no precommit
+func (s *SubmitPrecommitTask) queryPreCommitMessageCid(ctx context.Context, spAddr address.Address, sectorNumber abi.SectorNumber) (cid.Cid, error) {
+	log.Infow("----queryPreCommitMessageCid.0", "spAddr", spAddr.String(), "sectorNumber", sectorNumber)
+	pci, err := s.fullApi.StateSectorPreCommitInfo(ctx, spAddr, sectorNumber, types.EmptyTSK)
+	if err != nil {
+		return cid.Undef, err
+	}
+	if pci == nil {
+		return cid.Undef, nil
+	}
+
+	ts, err := s.fullApi.ChainGetTipSetByHeight(ctx, pci.PreCommitEpoch, types.EmptyTSK)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	msgs, err := s.fullApi.ChainGetMessagesInTipset(ctx, ts.Key())
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	log.Infow("----queryPreCommitMessageCid.1", "msgs", len(msgs), "spAddr", spAddr.String(), "sectorNumber", sectorNumber)
+	for _, msg := range msgs {
+		if msg.Message.Method != builtin.MethodsMiner.PreCommitSectorBatch2 {
+			continue
+		}
+
+		if msg.Message.To != spAddr {
+			continue
+		}
+
+		params := miner.PreCommitSectorBatchParams2{}
+
+		err := params.UnmarshalCBOR(bytes.NewReader(msg.Message.Params))
+		if err != nil {
+			return cid.Undef, err
+		}
+
+		if params.Sectors[0].SectorNumber == sectorNumber {
+			log.Warnw("----queryPreCommitMessageCid.2", "msg.Cid", msg.Cid)
+			return msg.Cid, nil
+		}
+	}
+	return cid.Undef, xerrors.Errorf("queryPreCommitMessageCid not found. sp:%s, sector:%d", spAddr.String(), sectorNumber)
 }
 
 func (s *SubmitPrecommitTask) checkPrecommit(ctx context.Context, params miner.PreCommitSectorBatchParams2) (record bool, err error) {

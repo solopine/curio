@@ -23,6 +23,7 @@ var log = logging.Logger("webrpc")
 type WebRPC struct {
 	deps      *deps.Deps
 	taskSPIDs map[string]SpidGetter
+	sectorIDs map[string]SectorIDGetter
 	stor      adt.Store
 }
 
@@ -39,6 +40,7 @@ func Routes(r *mux.Router, deps *deps.Deps, debug bool) {
 		deps:      deps,
 		stor:      store.ActorStore(context.Background(), blockstore.NewReadCachedBlockstore(blockstore.NewAPIBlockstore(deps.Chain), curiochain.ChainBlockCache)),
 		taskSPIDs: makeTaskSPIDs(),
+		sectorIDs: makeTaskSectorIDs(),
 	}
 
 	opt := []jsonrpc.ServerOption{}

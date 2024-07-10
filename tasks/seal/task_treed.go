@@ -28,8 +28,43 @@ func (t *TreeDTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.Task
 	if IsDevnet {
 		return &ids[0], nil
 	}
-	if engine.Resources().Gpu > 0 {
-		return &ids[0], nil
+	if engine.Resources().Gpu <= 0 {
+		log.Infow("----treed.CanAccept.0",
+			"engine.Resources().Gpu", engine.Resources().Gpu,
+			"engine.Resources().Cpu", engine.Resources().Cpu,
+			"engine.Resources().Ram", engine.Resources().Ram,
+			"engine.Resources().MachineID", engine.Resources().MachineID)
+		return nil, nil
+	}
+
+	ctx := context.Background()
+	ls, err := t.sc.LocalStorage(ctx)
+	if err != nil {
+		return nil, xerrors.Errorf("getting local storage: %w", err)
+	}
+	log.Infow("----treed.CanAccept.LocalStorage", "ls", ls)
+	for _, id := range ids {
+		s, err := t.taskToSector(id)
+		log.Infow("----treed.CanAccept", "s", s, "TaskId", id)
+		if err != nil {
+			continue
+		}
+		var storageIds []string
+		err = t.db.Select(ctx, &storageIds, `SELECT storage_id FROM sector_location WHERE miner_id=$1 AND sector_num=$2 AND sector_filetype=$3`,
+			s.SpID, s.SectorNumber, storiface.FTCache)
+		if err != nil {
+			return nil, xerrors.Errorf("getting sector id from db: %w", err)
+		}
+		log.Infow("----treed.CanAccept.Select", "storageIds", storageIds)
+		for _, localStoragePath := range ls {
+			if localStoragePath.CanSeal {
+				for _, storageId := range storageIds {
+					if storageId == string(localStoragePath.ID) {
+						return &id, nil
+					}
+				}
+			}
+		}
 	}
 	return nil, nil
 }
@@ -135,6 +170,8 @@ func (t *TreeDTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 		},
 		ProofType: sectorParams.RegSealProof,
 	}
+
+	log.Infow("----TreeDTask.do", "taskID", taskID, "sref", sref)
 
 	// Fetch the Sector to local storage
 	fsPaths, pathIds, release, err := t.sc.PreFetch(ctx, sref, &taskID)

@@ -151,6 +151,9 @@ func (s *SealPoller) poll(ctx context.Context) error {
 
 	for _, task := range tasks {
 		task := task
+
+		//log.Infow("----seal.poller", "task", task)
+
 		if task.Failed {
 			continue
 		}
@@ -263,6 +266,14 @@ func (t pollTask) afterPrecommitMsg() bool {
 
 func (t pollTask) afterPrecommitMsgSuccess() bool {
 	return t.AfterPrecommitMsgSuccess && t.afterPrecommitMsg()
+}
+
+func (t pollTask) afterCommitMsg() bool {
+	return t.AfterCommitMsg && t.afterPoRep()
+}
+
+func (t pollTask) afterCommitMsgSuccess() bool {
+	return t.AfterCommitMsgSuccess && t.afterCommitMsg()
 }
 
 func (s *SealPoller) pollStartPoRep(ctx context.Context, task pollTask, ts *types.TipSet) {
