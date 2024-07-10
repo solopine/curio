@@ -29,6 +29,8 @@ const ipfsPrefix = "/ipfs/"
 const infoPage = "/info"
 
 func NewRetrievalProvider(ctx context.Context, db *harmonydb.DB, idxStore *indexstore.IndexStore, cpr *cachedreader.CachedPieceReader) *Provider {
+	//u.Debug = true
+
 	bs := remoteblockstore.NewRemoteBlockstore(idxStore, db, cpr)
 	lsys := storeutil.LinkSystemForBlockstore(bs)
 	fr := frisbii.NewHttpIpfs(ctx, lsys)
@@ -42,7 +44,7 @@ func NewRetrievalProvider(ctx context.Context, db *harmonydb.DB, idxStore *index
 }
 
 func Router(mux *chi.Mux, rp *Provider) {
-	mux.Get(piecePrefix+"{cid}", rp.handleByPieceCid)
+	//mux.Get(piecePrefix+"{cid}", rp.handleByPieceCid)
 	mux.Get(ipfsPrefix+"{cid}", rp.fr.ServeHTTP)
 	mux.Get(infoPage, handleInfo)
 }

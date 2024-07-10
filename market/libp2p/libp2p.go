@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"net"
 	"runtime/debug"
 	"strings"
@@ -221,7 +222,8 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 	ret.ListenAddr = append(ret.ListenAddr, must.One(multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/0/ws")))
 
 	{
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/wss", httpConf.DomainName, 443))
+		//publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/wss", httpConf.DomainName, 24001))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/ws", httpConf.DomainName, txcar.TxHttpPort))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}
@@ -239,7 +241,8 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 	}
 
 	{
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/https", httpConf.DomainName, 443))
+		//publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/https", httpConf.DomainName, 24001))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/http", httpConf.DomainName, txcar.TxHttpPort))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}
@@ -289,7 +292,7 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 }
 
 func MakeAddrsFactory(announceAddrs []multiaddr.Multiaddr) (basichost.AddrsFactory, error) {
-	return func(_ []multiaddr.Multiaddr) []multiaddr.Multiaddr {
+	return func(ma []multiaddr.Multiaddr) []multiaddr.Multiaddr {
 		return announceAddrs
 	}, nil
 }
@@ -522,12 +525,21 @@ func (p *DealProvider) checkMinerInfos(ctx context.Context, sender *message.Send
 			}
 		}
 
-		if chainma != nil && chainma.Equal(announceAddr) {
+		minerAnnounceAddrString := strings.Replace(announceAddr.String(), "/dns/", "/dns/"+m.String()+".", 1)
+		minerAnnounceAddr, err := multiaddr.NewMultiaddr(minerAnnounceAddrString)
+		if err != nil {
+			log.Errorw("failed to create minerAnnounceAddr", "miner", m, "error", err)
+			continue
+		}
+
+		log.Infow("chainma", "miner", m, "chainma", chainma.String(), "minerAnnounceAddr", minerAnnounceAddr.String())
+
+		if chainma != nil && chainma.Equal(minerAnnounceAddr) {
 			continue
 		}
 
 		// update the multiaddr
-		params, aerr := actors.SerializeParams(&miner.ChangeMultiaddrsParams{NewMultiaddrs: []abi.Multiaddrs{announceAddr.Bytes()}})
+		params, aerr := actors.SerializeParams(&miner.ChangeMultiaddrsParams{NewMultiaddrs: []abi.Multiaddrs{minerAnnounceAddr.Bytes()}})
 		if aerr != nil {
 			log.Errorw("failed to serialize params", "miner", m, "error", aerr)
 			continue

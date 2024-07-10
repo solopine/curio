@@ -61,6 +61,8 @@ func (m *MoveStorageTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) 
 		ProofType: abi.RegisteredSealProof(task.RegSealProof),
 	}
 
+	log.Infow("----MoveStorageTask.do", "taskID", taskID, "sector", sector)
+
 	err = m.sc.MoveStorage(ctx, sector, &taskID)
 	if err != nil {
 		return false, xerrors.Errorf("moving storage: %w", err)
@@ -130,11 +132,12 @@ func (m *MoveStorageTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytas
 		     * yield a schedule cycle/s if we have moves already in progress
 	*/
 
-	////
 	ls, err := m.sc.LocalStorage(ctx)
 	if err != nil {
 		return nil, xerrors.Errorf("getting local storage: %w", err)
 	}
+	log.Infow("----MoveStorageTask.CanAccept.LocalStorage", "ls", ls)
+
 	var haveStorage bool
 	for _, l := range ls {
 		if l.CanStore {
@@ -147,8 +150,30 @@ func (m *MoveStorageTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytas
 		return nil, nil
 	}
 
-	id := ids[0]
-	return &id, nil
+	for _, id := range ids {
+		s, err := m.taskToSector(id)
+		//log.Infow("----MoveStorageTask.CanAccept", "s", s, "TaskId", id)
+		if err != nil {
+			continue
+		}
+		var storageIds []string
+		err = m.db.Select(ctx, &storageIds, `SELECT storage_id FROM sector_location WHERE miner_id=$1 AND sector_num=$2 AND sector_filetype=$3`,
+			s.SpID, s.SectorNumber, storiface.FTCache)
+		if err != nil {
+			return nil, xerrors.Errorf("getting sector id from db: %w", err)
+		}
+		//log.Infow("----MoveStorageTask.CanAccept.Select", "storageIds", storageIds)
+		for _, localStoragePath := range ls {
+			if localStoragePath.CanSeal {
+				for _, storageId := range storageIds {
+					if storageId == string(localStoragePath.ID) {
+						return &id, nil
+					}
+				}
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (m *MoveStorageTask) TypeDetails() harmonytask.TaskTypeDetails {

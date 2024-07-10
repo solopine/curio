@@ -154,6 +154,10 @@ func (p *PieceProvider) ReadPiece(ctx context.Context, sector storiface.SectorRe
 	return r, nil
 }
 
+func (p *PieceProvider) TxReadUnsealed(ctx context.Context, s storiface.SectorRef) (io.ReadCloser, error) {
+	return p.storage.ReaderSeq(ctx, s, storiface.FTUnsealed)
+}
+
 var _ storiface.Reader = &pieceReader{}
 
 // MaxPieceReaderBurnBytes - For small read skips, it's faster to "burn" some bytes than to set up new sector reader.

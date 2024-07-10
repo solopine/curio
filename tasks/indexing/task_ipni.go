@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"io"
 	"net/url"
 	"strings"
@@ -111,35 +112,53 @@ func (I *IPNITask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		return false, xerrors.Errorf("unmarshaling piece info: %w", err)
 	}
 
-	reader, err := I.pieceProvider.ReadPiece(ctx, storiface.SectorRef{
-		ID: abi.SectorID{
-			Miner:  abi.ActorID(task.SPID),
-			Number: task.Sector,
-		},
-		ProofType: task.Proof,
-	}, storiface.PaddedByteIndex(task.Offset).Unpadded(), pi.Size.Unpadded(), pi.PieceCID)
-	if err != nil {
-		return false, xerrors.Errorf("getting piece reader: %w", err)
-	}
-
-	opts := []carv2.Option{carv2.ZeroLengthSectionAsEOF(true)}
-	blockReader, err := carv2.NewBlockReader(bufio.NewReaderSize(reader, 4<<20), opts...)
-	if err != nil {
-		return false, fmt.Errorf("getting block reader over piece: %w", err)
-	}
-
 	chk := chunker.NewInitialChunker()
 
-	blockMetadata, err := blockReader.SkipNext()
-	for err == nil {
-		if err := chk.Accept(blockMetadata.Cid.Hash(), int64(blockMetadata.Offset), blockMetadata.Size+40); err != nil {
-			return false, xerrors.Errorf("accepting block: %w", err)
+	txPiece, err := txcar.GetTxPieceFromDbByPiece(ctx, I.db, pi.PieceCID)
+	if err != nil {
+		return false, err
+	}
+	if txPiece != nil {
+		log.Infow("----txPiece IPNITask.txPiece", "pieceCid", txPiece.PieceCid.String())
+		allRecs, err := parseRecordsForTxPiece(ctx, I.pieceProvider, abi.ActorID(task.SPID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
+		if err != nil {
+			return false, xerrors.Errorf("ParseRecordsForTxPiece: %w", err)
+		}
+		for _, rec := range allRecs {
+			if err := chk.Accept(rec.Cid.Hash(), int64(rec.Offset), rec.Size+40); err != nil {
+				return false, xerrors.Errorf("----accepting block: %w", err)
+			}
+		}
+	} else {
+		log.Infow("----normal IPNITask", "task.Prov", task.Prov, "task.Sector", task.Sector)
+		reader, err := I.pieceProvider.ReadPiece(ctx, storiface.SectorRef{
+			ID: abi.SectorID{
+				Miner:  abi.ActorID(task.SPID),
+				Number: task.Sector,
+			},
+			ProofType: task.Proof,
+		}, storiface.PaddedByteIndex(task.Offset).Unpadded(), pi.Size.Unpadded(), pi.PieceCID)
+		if err != nil {
+			return false, xerrors.Errorf("getting piece reader: %w", err)
 		}
 
-		blockMetadata, err = blockReader.SkipNext()
-	}
-	if !errors.Is(err, io.EOF) {
-		return false, xerrors.Errorf("reading block: %w", err)
+		opts := []carv2.Option{carv2.ZeroLengthSectionAsEOF(true)}
+		blockReader, err := carv2.NewBlockReader(bufio.NewReaderSize(reader, 4<<20), opts...)
+		if err != nil {
+			return false, fmt.Errorf("getting block reader over piece: %w", err)
+		}
+
+		blockMetadata, err := blockReader.SkipNext()
+		for err == nil {
+			if err := chk.Accept(blockMetadata.Cid.Hash(), int64(blockMetadata.Offset), blockMetadata.Size+40); err != nil {
+				return false, xerrors.Errorf("accepting block: %w", err)
+			}
+
+			blockMetadata, err = blockReader.SkipNext()
+		}
+		if !errors.Is(err, io.EOF) {
+			return false, xerrors.Errorf("reading block: %w", err)
+		}
 	}
 
 	// make sure we still own the task before writing to the database
@@ -190,7 +209,8 @@ func (I *IPNITask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 		}
 
 		{
-			u, err := url.Parse(fmt.Sprintf("https://%s", I.cfg.HTTP.DomainName))
+			//u, err := url.Parse(fmt.Sprintf("https://%s", I.cfg.HTTP.DomainName))
+			u, err := url.Parse(fmt.Sprintf("http://%s:%d", I.cfg.HTTP.DomainName, txcar.TxHttpPort))
 			if err != nil {
 				return false, xerrors.Errorf("parsing announce address domain: %w", err)
 			}

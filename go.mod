@@ -90,6 +90,7 @@ require (
 	github.com/samber/lo v1.39.0
 	github.com/sirupsen/logrus v1.9.2
 	github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb
+	github.com/solopine/txcar v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/triplewz/poseidon v0.0.2
 	github.com/urfave/cli/v2 v2.27.5
@@ -210,6 +211,7 @@ require (
 	github.com/ipfs/go-ds-leveldb v0.5.0 // indirect
 	github.com/ipfs/go-ds-measure v0.2.0 // indirect
 	github.com/ipfs/go-ipfs-blockstore v1.3.1 // indirect
+	github.com/ipfs/go-ipfs-chunker v0.0.5 // indirect
 	github.com/ipfs/go-ipfs-delay v0.0.1 // indirect
 	github.com/ipfs/go-ipfs-ds-help v1.1.1 // indirect
 	github.com/ipfs/go-ipfs-exchange-interface v0.2.1 // indirect
@@ -372,3 +374,5 @@ require (
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
 
 replace github.com/KarpelesLab/reflink => github.com/magik6k/reflink v1.0.2-patch1
+
+replace github.com/filecoin-project/lotus => github.com/solopine/lotus v1.32.2-curio-1

@@ -2,7 +2,12 @@ package paths
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"github.com/filecoin-project/curio/harmony/harmonydb"
+	"github.com/filecoin-project/curio/txcar"
+	"github.com/google/uuid"
+	txcarlib "github.com/solopine/txcar/txcar"
 	"io"
 	"net/http"
 	"os"
@@ -48,6 +53,7 @@ func (d *DefaultPartialFileHandler) Close(pf *partialfile.PartialFile) error {
 type FetchHandler struct {
 	Local     Store
 	PfHandler PartialFileHandler
+	DB        *harmonydb.DB
 }
 
 func (handler *FetchHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { // /remote/
@@ -89,6 +95,8 @@ func (handler *FetchHandler) remoteStatFs(w http.ResponseWriter, r *http.Request
 // remoteGetSector returns the sector file/tared directory byte stream for the sectorID and sector file type sent in the request.
 // returns an error if it does NOT have the required sector file/dir.
 func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Request) {
+	log.Infow("----remoteGetSector.0", "RemoteAddr", r.RemoteAddr)
+
 	vars := mux.Vars(r)
 
 	id, err := storiface.ParseSectorID(vars["id"])
@@ -110,6 +118,38 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 	si := storiface.SectorRef{
 		ID:        id,
 		ProofType: 0,
+	}
+	if ft == storiface.FTUnsealed {
+		ctx := context.Background()
+		txPiece, err := txcar.GetTxPieceFromDbBySector(ctx, handler.DB, id)
+		if err != nil {
+			log.Errorw("GetTxPieceFromDbBySector", "id", id)
+			w.WriteHeader(500)
+			return
+		}
+		if txPiece != nil && txPiece.Version == txcarlib.V1 {
+			reqId := uuid.New()
+			// is tx car
+			log.Infow("----remoteGetSector.TxCar.begin", "reqId", reqId, "si", si, "txPiece", txPiece, "r.URL", r.URL, "r.Header", r.Header)
+
+			serveDone := make(chan struct{}, 1)
+			unsealedFilePath, err := txcarlib.GetTxCarUnsealedCache(reqId, *txPiece, serveDone)
+			if err != nil {
+				log.Errorf("txcar.NewTxCarUnsealedFile: %x", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			// will do a ranged read over the file at the given path if the caller has asked for a ranged read in the request headers.
+			log.Infow("----remoteGetSector.TxCar.before.serve", "reqId", reqId, "si", si, "txPiece", txPiece, "unsealedFilePath", unsealedFilePath)
+			http.ServeFile(w, r, unsealedFilePath)
+			serveDone <- struct{}{}
+			log.Infow("----remoteGetSector.TxCar.complete", "reqId", reqId, "si", si, "txPiece", txPiece)
+			return
+		} else {
+			// is regular, continue
+			log.Infow("----remoteGetSector.isNotTxCar", "si", si, "err", err)
+		}
 	}
 
 	paths, _, err := handler.Local.AcquireSector(r.Context(), si, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
@@ -248,6 +288,26 @@ func (handler *FetchHandler) remoteGetAllocated(w http.ResponseWriter, r *http.R
 	si := storiface.SectorRef{
 		ID:        id,
 		ProofType: 0,
+	}
+
+	txPiece, err := txcar.GetTxPieceFromDbBySector(context.Background(), handler.DB, id)
+	if err != nil {
+		log.Errorf("GetTxPieceFromDbBySector: %+v", err)
+		w.WriteHeader(500)
+		return
+	}
+
+	if txPiece != nil {
+		log.Infow("AcquireSector.IsAndGetTxCarInfo", "txPiece", txPiece)
+		if offi == 0 && uint64(abi.UnpaddedPieceSize(szi).Padded()) == uint64(ssize) {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		log.Debugf("----txcar. returning StatusRequestedRangeNotSatisfiable: worker does NOT have unsealed file with unsealed piece, sector:%+v, offset:%d, size:%d", id, offi, szi)
+		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+		return
+	} else {
+		log.Infow("AcquireSector.IsAndGetTxCarInfo.NOT", "id", id)
 	}
 
 	// get the path of the local Unsealed file for the given sector.

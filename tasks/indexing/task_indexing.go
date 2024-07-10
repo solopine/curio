@@ -1,16 +1,13 @@
 package indexing
 
 import (
-	"bufio"
 	"context"
 	"errors"
-	"fmt"
-	"io"
+	txcarlib "github.com/solopine/txcar/txcar"
 	"time"
 
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
-	carv2 "github.com/ipld/go-car/v2"
 	"github.com/yugabyte/pgx/v5"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/xerrors"
@@ -27,6 +24,8 @@ import (
 	"github.com/filecoin-project/curio/lib/pieceprovider"
 	"github.com/filecoin-project/curio/lib/storiface"
 	"github.com/filecoin-project/curio/market/indexstore"
+
+	"github.com/filecoin-project/curio/txcar"
 )
 
 var log = logging.Logger("indexing")
@@ -134,33 +133,146 @@ func (i *IndexingTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 		return false, xerrors.Errorf("parsing piece CID: %w", err)
 	}
 
-	reader, err := i.pieceProvider.ReadPiece(ctx, storiface.SectorRef{
-		ID: abi.SectorID{
-			Miner:  abi.ActorID(task.SpID),
-			Number: task.Sector,
-		},
-		ProofType: task.Proof,
-	}, storiface.PaddedByteIndex(task.Offset).Unpadded(), task.Size.Unpadded(), pieceCid)
-
+	txPiece, err := txcar.GetTxPieceFromDbByPiece(ctx, i.db, pieceCid)
 	if err != nil {
-		return false, xerrors.Errorf("getting piece reader: %w", err)
+		return false, err
+	}
+	if txPiece != nil {
+		log.Infow("----txPiece indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+		return i.indexForTxPiece(ctx, taskID, task, txPiece)
 	}
 
-	defer reader.Close()
+	log.Infow("----txPiece indexForNormal - will not index", "pieceCid", txPiece.PieceCid.String())
+	_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
+                                     complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
+	if err != nil {
+		return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline: %w", err)
+	}
+
+	return true, nil
+
+	//	reader, err := i.pieceProvider.ReadPiece(ctx, storiface.SectorRef{
+	//		ID: abi.SectorID{
+	//			Miner:  abi.ActorID(task.SpID),
+	//			Number: task.Sector,
+	//		},
+	//		ProofType: task.Proof,
+	//	}, storiface.PaddedByteIndex(task.Offset).Unpadded(), task.Size.Unpadded(), pieceCid)
+	//
+	//	if err != nil {
+	//		return false, xerrors.Errorf("getting piece reader: %w", err)
+	//	}
+	//
+	//	defer reader.Close()
+	//
+	//	startTime := time.Now()
+	//
+	//	dealCfg := i.cfg.Market.StorageMarketConfig
+	//	chanSize := dealCfg.Indexing.InsertConcurrency * dealCfg.Indexing.InsertBatchSize
+	//
+	//	recs := make(chan indexstore.Record, chanSize)
+	//
+	//	//recs := make([]indexstore.Record, 0, chanSize)
+	//	opts := []carv2.Option{carv2.ZeroLengthSectionAsEOF(true)}
+	//	blockReader, err := carv2.NewBlockReader(bufio.NewReaderSize(reader, 4<<20), opts...)
+	//	if err != nil {
+	//		return false, fmt.Errorf("getting block reader over piece: %w", err)
+	//	}
+	//
+	//	var eg errgroup.Group
+	//	addFail := make(chan struct{})
+	//	var interrupted bool
+	//	var blocks int64
+	//	start := time.Now()
+	//
+	//	eg.Go(func() error {
+	//		defer close(addFail)
+	//
+	//		serr := i.indexStore.AddIndex(ctx, pieceCid, recs)
+	//		if serr != nil {
+	//			return xerrors.Errorf("adding index to DB: %w", serr)
+	//		}
+	//		return nil
+	//	})
+	//
+	//	blockMetadata, err := blockReader.SkipNext()
+	//loop:
+	//	for err == nil {
+	//		blocks++
+	//
+	//		select {
+	//		case recs <- indexstore.Record{
+	//			Cid:    blockMetadata.Cid,
+	//			Offset: blockMetadata.Offset,
+	//			Size:   blockMetadata.Size,
+	//		}:
+	//		case <-addFail:
+	//			interrupted = true
+	//			break loop
+	//		}
+	//		blockMetadata, err = blockReader.SkipNext()
+	//	}
+	//	if err != nil && !errors.Is(err, io.EOF) {
+	//		return false, fmt.Errorf("generating index for piece: %w", err)
+	//	}
+	//
+	//	// Close the channel
+	//	close(recs)
+	//
+	//	// Wait till AddIndex is finished
+	//	err = eg.Wait()
+	//	if err != nil {
+	//		return false, xerrors.Errorf("adding index to DB (interrupted %t): %w", interrupted, err)
+	//	}
+	//
+	//	log.Infof("Indexing deal %s took %0.3f seconds", task.UUID, time.Since(startTime).Seconds())
+	//
+	//	err = i.recordCompletion(ctx, task, taskID, true)
+	//	if err != nil {
+	//		return false, err
+	//	}
+	//
+	//	blocksPerSecond := float64(blocks) / time.Since(start).Seconds()
+	//	log.Infow("Piece indexed", "piece_cid", task.PieceCid, "uuid", task.UUID, "sp_id", task.SpID, "sector", task.Sector, "blocks", blocks, "blocks_per_second", blocksPerSecond)
+	//
+	//	return true, nil
+}
+
+func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.TaskID, task itask, txPiece *txcarlib.TxPiece) (done bool, err error) {
+	if txPiece == nil {
+		return false, xerrors.Errorf("cannot call indexForTxPiece with txPiece==nil")
+	}
+
+	if txPiece.Version == txcarlib.V1 {
+		log.Infow("----txPiece V1 indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+
+		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
+                                     complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
+		if err != nil {
+			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline1: %w", err)
+		}
+		return true, nil
+	}
+
+	log.Infow("----txPiece indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
 
 	startTime := time.Now()
 
+	allRecs, err := parseRecordsForTxPiece(ctx, i.pieceProvider, abi.ActorID(task.SpID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
+	if err != nil {
+		log.Errorw("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String(), "error", err)
+
+		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
+                                     complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
+		if err != nil {
+			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline2: %w", err)
+		}
+		return true, nil
+	}
+
 	dealCfg := i.cfg.Market.StorageMarketConfig
 	chanSize := dealCfg.Indexing.InsertConcurrency * dealCfg.Indexing.InsertBatchSize
-
 	recs := make(chan indexstore.Record, chanSize)
-
-	//recs := make([]indexstore.Record, 0, chanSize)
-	opts := []carv2.Option{carv2.ZeroLengthSectionAsEOF(true)}
-	blockReader, err := carv2.NewBlockReader(bufio.NewReaderSize(reader, 4<<20), opts...)
-	if err != nil {
-		return false, fmt.Errorf("getting block reader over piece: %w", err)
-	}
 
 	var eg errgroup.Group
 	addFail := make(chan struct{})
@@ -171,32 +283,26 @@ func (i *IndexingTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 	eg.Go(func() error {
 		defer close(addFail)
 
-		serr := i.indexStore.AddIndex(ctx, pieceCid, recs)
+		serr := i.indexStore.AddIndex(ctx, txPiece.PieceCid, recs)
 		if serr != nil {
 			return xerrors.Errorf("adding index to DB: %w", serr)
 		}
 		return nil
 	})
 
-	blockMetadata, err := blockReader.SkipNext()
-loop:
-	for err == nil {
+	for _, rec := range allRecs {
 		blocks++
 
 		select {
 		case recs <- indexstore.Record{
-			Cid:    blockMetadata.Cid,
-			Offset: blockMetadata.Offset,
-			Size:   blockMetadata.Size,
+			Cid:    rec.Cid,
+			Offset: rec.Offset,
+			Size:   rec.Size,
 		}:
 		case <-addFail:
 			interrupted = true
-			break loop
+			break
 		}
-		blockMetadata, err = blockReader.SkipNext()
-	}
-	if err != nil && !errors.Is(err, io.EOF) {
-		return false, fmt.Errorf("generating index for piece: %w", err)
 	}
 
 	// Close the channel

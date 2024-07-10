@@ -353,6 +353,14 @@ func (t pollTask) afterPrecommitMsgSuccess() bool {
 	return t.AfterPrecommitMsgSuccess && t.afterPrecommitMsg()
 }
 
+func (t pollTask) afterCommitMsg() bool {
+	return t.AfterCommitMsg && t.afterPoRep()
+}
+
+func (t pollTask) afterCommitMsgSuccess() bool {
+	return t.AfterCommitMsgSuccess && t.afterCommitMsg()
+}
+
 func (s *SealPoller) pollStartPoRep(ctx context.Context, task pollTask, ts *types.TipSet) {
 	if s.pollers[pollerPoRep].IsSet() && task.afterPrecommitMsgSuccess() && task.SeedEpoch != nil &&
 		task.TaskPoRep == nil && !task.AfterPoRep &&

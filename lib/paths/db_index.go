@@ -326,6 +326,7 @@ retryReportHealth:
 		report.Stat.Used,
 		id)
 	if err != nil {
+		log.Errorw("----StorageReportHealth.1", "err", err)
 		//return xerrors.Errorf("updating storage health in DB fails with err: %w", err)
 		if harmonydb.IsErrSerialization(err) {
 			time.Sleep(retryWait)
@@ -775,6 +776,9 @@ func (dbi *DBIndex) StorageInfo(ctx context.Context, id storiface.ID) (storiface
 			"FROM storage_path WHERE storage_id=$1", string(id))
 	if err != nil {
 		return storiface.StorageInfo{}, xerrors.Errorf("StorageInfo query fails: %w", err)
+	}
+	if len(qResults) == 0 {
+		return storiface.StorageInfo{}, xerrors.Errorf("StorageInfo query no row for storage id: %s", string(id))
 	}
 
 	var sinfo storiface.StorageInfo

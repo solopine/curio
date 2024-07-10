@@ -1,10 +1,19 @@
 package ffi
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/lib/partialfile"
+	"github.com/filecoin-project/curio/txcar"
+	"github.com/filecoin-project/lotus/storage/sealer/fr32"
+	carv2 "github.com/ipld/go-car/v2"
+	pool "github.com/libp2p/go-buffer-pool"
+	txcarlib "github.com/solopine/txcar/txcar"
 	"io"
 	"os"
 	"path/filepath"
@@ -269,7 +278,7 @@ func (sb *SealCalls) TreeRC(ctx context.Context, task *harmonytask.TaskID, secto
 				return cid.Undef, cid.Undef, xerrors.Errorf("truncating reflinked sealed file: %w", err)
 			}
 		} else {
-			log.Errorw("reflink treed -> sealed failed, falling back to slow copy, use single scratch btrfs or xfs filesystem", "error", err, "sector", sector, "cache", fspaths.Cache, "sealed", fspaths.Sealed)
+			log.Warnw("reflink treed -> sealed failed, falling back to slow copy, use single scratch btrfs or xfs filesystem", "error", err, "sector", sector, "cache", fspaths.Cache, "sealed", fspaths.Sealed)
 
 			// fallback to slow copy, copy ssize bytes from treed to sealed
 			dst, err := os.OpenFile(fspaths.Sealed, os.O_WRONLY|os.O_CREATE, 0644)
@@ -352,17 +361,19 @@ func (sb *SealCalls) GenerateSynthPoRep() {
 }
 
 func (sb *SealCalls) PoRepSnark(ctx context.Context, sn storiface.SectorRef, sealed, unsealed cid.Cid, ticket abi.SealRandomness, seed abi.InteractiveSealRandomness) ([]byte, error) {
+	log.Infow("----PoRepSnark.1", "sn", sn)
 	vproof, err := sb.sectors.storage.GeneratePoRepVanillaProof(ctx, sn, sealed, unsealed, ticket, seed)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to generate vanilla proof: %w", err)
 	}
 
+	log.Infow("----PoRepSnark.2", "sn", sn)
 	ctx = ffiselect.WithLogCtx(ctx, "sector", sn.ID, "sealed", sealed, "unsealed", unsealed, "ticket", ticket, "seed", seed)
 	proof, err := ffiselect.FFISelect.SealCommitPhase2(ctx, vproof, sn.ID.Number, sn.ID.Miner)
 	if err != nil {
 		return nil, xerrors.Errorf("computing seal proof failed: %w", err)
 	}
-
+	log.Infow("----PoRepSnark.3", "sn", sn)
 	ok, err := ffi.VerifySeal(proof2.SealVerifyInfo{
 		SealProof:             sn.ProofType,
 		SectorID:              sn.ID,
@@ -526,7 +537,7 @@ func changePathType(path string, newType storiface.SectorFileType) (string, erro
 	return newPath, nil
 }
 
-func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storiface.SectorRef, sectorPaths, pathIDs *storiface.SectorPaths, keepUnsealed bool) error {
+func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storiface.SectorRef, sectorPaths, pathIDs *storiface.SectorPaths, keepUnsealed bool, txPiece *txcarlib.TxPiece) error {
 	ssize, err := sector.ProofType.SectorSize()
 	if err != nil {
 		return xerrors.Errorf("getting sector size: %w", err)
@@ -554,6 +565,14 @@ func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storifac
 		}
 	}()
 
+	if txPiece != nil && txPiece.Version == txcarlib.V1 {
+		err := txcar.CreateFakeUnsealedFile(sectorPaths.Unsealed, *txPiece)
+		if err != nil {
+			return xerrors.Errorf("CreateFakeUnsealedFile - %s: %w", sectorPaths.Unsealed, err)
+		}
+		return nil
+	}
+
 	// tree-d contains exactly unsealed data in the prefix, so
 	// * we move it to a temp file
 	// * we truncate the temp file to the sector size
@@ -579,7 +598,7 @@ func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storifac
 					if tempUnsealedExists {
 						// unsealed file does not exist, but temp unsealed file does
 						// so we can just resume where the previous attempt left off
-						return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize)
+						return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize, sector, txPiece)
 					}
 					return xerrors.Errorf("neither unsealed file nor temp-unsealed file exists")
 
@@ -587,21 +606,37 @@ func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storifac
 				return xerrors.Errorf("stat unsealed file: %w", err)
 
 			}
-			if st.Size() != int64(ssize) {
-				if tempUnsealedExists {
-					// unsealed file exists but is the wrong size, and temp unsealed file exists
-					// so we can just resume where the previous attempt left off with some cleanup
-
-					if err := os.Remove(sectorPaths.Unsealed); err != nil {
-						return xerrors.Errorf("removing unsealed file from last attempt: %w", err)
-
+			if txPiece != nil {
+				// tempUnsealed is not originate one
+				if !checkTxCarIndexFile(*txPiece, sectorPaths.Unsealed) {
+					log.Warnw("sectorPaths.Unsealed(%s) is not index file", sectorPaths.Unsealed)
+					// sectorPaths.Unsealed
+					if tempUnsealedExists {
+						// unsealed file exists but is not originate one, and temp unsealed file exists
+						// so we can just resume where the previous attempt left off with some cleanup
+						if err := os.Remove(sectorPaths.Unsealed); err != nil {
+							return xerrors.Errorf("removing unsealed file from last attempt: %w", err)
+						}
+						return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize, sector, txPiece)
 					}
+					return xerrors.Errorf("sectorPaths.Unsealed(%s) is not txcarv2 index, and temp unsealed is missing: %w", sectorPaths.Unsealed, err)
+				}
+				log.Warnw("sectorPaths.Unsealed(%s) is already index file", sectorPaths.Unsealed)
+			} else {
+				if st.Size() != int64(ssize) {
+					if tempUnsealedExists {
+						// unsealed file exists but is the wrong size, and temp unsealed file exists
+						// so we can just resume where the previous attempt left off with some cleanup
 
-					return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize)
+						if err := os.Remove(sectorPaths.Unsealed); err != nil {
+							return xerrors.Errorf("removing unsealed file from last attempt: %w", err)
+
+						}
+						return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize, sector, txPiece)
+					}
+					return xerrors.Errorf("unsealed file is not the right size: %d != %d and temp unsealed is missing", st.Size(), ssize)
 
 				}
-				return xerrors.Errorf("unsealed file is not the right size: %d != %d and temp unsealed is missing", st.Size(), ssize)
-
 			}
 
 			// all good, just log that this edge case happened
@@ -618,23 +653,67 @@ func (sb *SealCalls) GenerateUnsealedSector(ctx context.Context, sector storifac
 		return xerrors.Errorf("moving tree-d to temp file: %w", err)
 	}
 
-	return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize)
+	return TruncateAndMoveUnsealed(tempUnsealed, sectorPaths.Unsealed, ssize, sector, txPiece)
 }
 
-func TruncateAndMoveUnsealed(tempUnsealed, unsealed string, ssize abi.SectorSize) error {
+func TruncateAndMoveUnsealed(tempUnsealed, unsealed string, ssize abi.SectorSize, sector storiface.SectorRef, txPiece *txcarlib.TxPiece) error {
 	// truncate unsealed file to sector size
 	if err := os.Truncate(tempUnsealed, int64(ssize)); err != nil {
 		return xerrors.Errorf("truncating unsealed file to sector size: %w", err)
 	}
 
-	// move temp file to unsealed location
-	if err := paths.Move(tempUnsealed, unsealed); err != nil {
-		return xerrors.Errorf("move temp unsealed sector to final location (%s -> %s): %w", tempUnsealed, unsealed, err)
+	if txPiece != nil {
+
+		fsInfo, err := os.Stat(tempUnsealed)
+		if err != nil {
+			return xerrors.Errorf("os.Stat(%s): %w", tempUnsealed, err)
+		}
+		if fsInfo.Size() != int64(ssize) {
+			// tempUnsealed is not originate one
+			if !checkTxCarIndexFile(*txPiece, tempUnsealed) {
+				return xerrors.Errorf("tempUnsealed(%s) is not txcarv2 index, but size < ssize(%d): %w", tempUnsealed, int64(ssize), err)
+			} else {
+				log.Warnw("tempUnsealed(%s) is already txcarv2 index, just move to unsealed", tempUnsealed)
+				goto moveToUnsealed
+			}
+		}
+
+		{ // get index from unsealed
+			indexPath := tempUnsealed + ".index"
+
+			err = createTxCarIndexFileFromUnsealed(tempUnsealed, sector.ProofType, *txPiece, indexPath)
+			if err != nil {
+				return xerrors.Errorf("createTxCarV2IndexFileFromUnsealed: %w", err)
+			}
+
+			// remove tempUnsealed
+			err = os.Remove(tempUnsealed)
+			if err != nil {
+				return xerrors.Errorf("os.Remove(%s): %w", tempUnsealed, err)
+			}
+
+			err = os.Rename(indexPath, tempUnsealed)
+			if err != nil {
+				return xerrors.Errorf("os.Rename(%s -> %s): %w", indexPath, tempUnsealed, err)
+			}
+		}
+
+	moveToUnsealed:
+		// move file to unsealed location
+		if err := paths.Move(tempUnsealed, unsealed); err != nil {
+			return xerrors.Errorf("move temp unsealed index sector to final location (%s -> %s): %w", tempUnsealed, unsealed, err)
+		}
+	} else {
+		// move temp file to unsealed location
+		if err := paths.Move(tempUnsealed, unsealed); err != nil {
+			return xerrors.Errorf("move temp unsealed sector to final location (%s -> %s): %w", tempUnsealed, unsealed, err)
+		}
 	}
+
 	return nil
 }
 
-func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool) error {
+func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool, txPiece *txcarlib.TxPiece) error {
 	sectorPaths, pathIDs, releaseSector, err := sb.sectors.AcquireSector(ctx, nil, sector, storiface.FTCache, storiface.FTNone, storiface.PathSealing)
 	if err != nil {
 		return xerrors.Errorf("acquiring sector paths: %w", err)
@@ -653,7 +732,7 @@ func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.Sector
 			return xerrors.Errorf("Unable to delete Synth cache: %w", err)
 		}
 	} else {
-		if err := sb.GenerateUnsealedSector(ctx, sector, &sectorPaths, &pathIDs, keepUnsealed); err != nil {
+		if err := sb.GenerateUnsealedSector(ctx, sector, &sectorPaths, &pathIDs, keepUnsealed, txPiece); err != nil {
 			return xerrors.Errorf("generating unsealed copy of the sector: %w", err)
 		}
 	}
@@ -781,7 +860,7 @@ func (sb *SealCalls) TreeD(ctx context.Context, sector storiface.SectorRef, unse
 	return nil
 }
 
-func (sb *SealCalls) SyntheticProofs(ctx context.Context, task *harmonytask.TaskID, sector storiface.SectorRef, sealed cid.Cid, unsealed cid.Cid, randomness abi.SealRandomness, pieces []abi.PieceInfo, keepUnsealed bool) error {
+func (sb *SealCalls) SyntheticProofs(ctx context.Context, task *harmonytask.TaskID, sector storiface.SectorRef, sealed cid.Cid, unsealed cid.Cid, randomness abi.SealRandomness, pieces []abi.PieceInfo, keepUnsealed bool, txPiece *txcarlib.TxPiece) error {
 	fspaths, pathIDs, releaseSector, err := sb.sectors.AcquireSector(ctx, task, sector, storiface.FTCache|storiface.FTSealed, storiface.FTNone, storiface.PathSealing)
 	if err != nil {
 		return xerrors.Errorf("acquiring sector paths: %w", err)
@@ -809,7 +888,7 @@ func (sb *SealCalls) SyntheticProofs(ctx context.Context, task *harmonytask.Task
 	}
 
 	// Generate unsealed copy before clearing cache
-	if err = sb.GenerateUnsealedSector(ctx, sector, &fspaths, &pathIDs, keepUnsealed); err != nil {
+	if err = sb.GenerateUnsealedSector(ctx, sector, &fspaths, &pathIDs, keepUnsealed, txPiece); err != nil {
 		return xerrors.Errorf("generating unsealed sector: %w", err)
 	}
 
@@ -822,4 +901,114 @@ func (sb *SealCalls) SyntheticProofs(ctx context.Context, task *harmonytask.Task
 	}
 
 	return nil
+}
+
+var ReadBuf = 128 * (127 * 8)
+
+func createTxCarIndexFileFromUnsealed(unsealedPath string, proofType abi.RegisteredSealProof, txPiece txcarlib.TxPiece, indexPath string) error {
+	var br io.Reader
+	{
+		ssize, err := proofType.SectorSize()
+		if err != nil {
+			return err
+		}
+
+		pieceSize := abi.PaddedPieceSize(ssize)
+
+		// open the unsealed sector file for the given sector size located at the given path.
+		pf, err := partialfile.OpenPartialFile(pieceSize, unsealedPath)
+		if err != nil {
+			return xerrors.Errorf("opening partial file: %w", err)
+		}
+
+		defer func() {
+			err := pf.Close()
+			if err != nil {
+				log.Errorw("pf.Close()", "unsealedPath", unsealedPath)
+			}
+		}()
+
+		r, err := pf.Reader(0, pieceSize)
+		if err != nil {
+			return err
+		}
+
+		buf := pool.Get(fr32.BufSize(pieceSize))
+
+		upr0, err := fr32.NewUnpadReaderBuf(r, pieceSize, buf)
+		if err != nil {
+			return xerrors.Errorf("creating unpadded reader: %w", err)
+		}
+
+		upr := io.LimitReader(upr0, int64(pieceSize.Unpadded()))
+
+		bir := bufio.NewReaderSize(upr, 127)
+		br = bufio.NewReaderSize(bir, ReadBuf)
+	}
+
+	// generate recs
+	txRecs := make([]txcarlib.TxBlockRecord, 0, 10000)
+	opts := []carv2.Option{carv2.ZeroLengthSectionAsEOF(true)}
+	blockReader, err := carv2.NewBlockReader(br, opts...)
+	if err != nil {
+		return fmt.Errorf("getting block reader over piece: %w", err)
+	}
+
+	blockMetadata, err := blockReader.SkipNext()
+	for err == nil {
+		txRecs = append(txRecs, txcarlib.TxBlockRecord{
+			Cid:    blockMetadata.Cid,
+			Offset: blockMetadata.SourceOffset,
+			Size:   blockMetadata.Size,
+		})
+
+		blockMetadata, err = blockReader.SkipNext()
+	}
+	if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("generating index for piece: %w", err)
+	}
+
+	// write file
+	indexFile, err := os.Create(indexPath)
+	if err != nil {
+		return err
+	}
+
+	enc := gob.NewEncoder(indexFile)
+	// 1. write txpiece
+	err = enc.Encode(txPiece)
+	if err != nil {
+		return err
+	}
+
+	// 2. write txRecs
+	err = enc.Encode(txRecs)
+	if err != nil {
+		return err
+	}
+
+	return indexFile.Close()
+}
+
+func checkTxCarIndexFile(txPiece txcarlib.TxPiece, indexPath string) bool {
+	reader, err := os.Open(indexPath)
+	if err != nil {
+		return false
+	}
+
+	dec := gob.NewDecoder(reader)
+
+	// 1. read txpiece
+	var txPieceRec txcarlib.TxPiece
+	if err := dec.Decode(&txPieceRec); err != nil {
+		return false
+	}
+	if txPiece.PieceCid != txPieceRec.PieceCid {
+		return false
+	}
+	if txPiece.Version != txPieceRec.Version {
+		return false
+	}
+
+	return true
 }

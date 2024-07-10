@@ -228,6 +228,7 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 		// Market tasks
 		if cfg.Subsystems.EnableDealMarket {
 			// Main market poller should run on all nodes
+			log.Infow("---- setup.NewCurioStorageDealMarket")
 			dm := storage_market.NewCurioStorageDealMarket(miners, db, cfg, si, full, as)
 			err := dm.StartMarket(ctx)
 			if err != nil {
@@ -235,20 +236,26 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 			}
 
 			if cfg.Subsystems.EnableCommP {
+				log.Infow("---- setup.NewCommpTask")
 				commpTask := storage_market.NewCommpTask(dm, db, must.One(slrLazy.Val()), full, cfg.Subsystems.CommPMaxTasks)
 				activeTasks = append(activeTasks, commpTask)
 			}
 
 			// PSD and Deal find task do not require many resources. They can run on all machines
+			log.Infow("---- setup.NewPSDTask")
 			psdTask := storage_market.NewPSDTask(dm, db, sender, as, &cfg.Market.StorageMarketConfig.MK12, full)
+
+			log.Infow("---- setup.NewFindDealTask")
 			dealFindTask := storage_market.NewFindDealTask(dm, db, full, &cfg.Market.StorageMarketConfig.MK12)
 
+			log.Infow("---- setup.NewCheckIndexesTask")
 			checkIndexesTask := indexing.NewCheckIndexesTask(db, iStore)
 
 			activeTasks = append(activeTasks, psdTask, dealFindTask, checkIndexesTask)
 
 			// Start libp2p hosts and handle streams. This is a special function which calls the shutdown channel
 			// instead of returning the error. This design is to allow libp2p take over if required
+			log.Infow("---- setup.NewDealProvider")
 			go libp2p.NewDealProvider(ctx, db, cfg, dm.MK12Handler, full, sender, miners, machine, shutdownChan)
 		}
 
@@ -257,13 +264,20 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 			return nil, err
 		}
 
-		idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
+		if cfg.HTTP.Enable {
+			idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
 
-		indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
-		ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
-		activeTasks = append(activeTasks, ipniTask, indexingTask)
+			log.Infow("---- setup.NewIndexingTask")
+			indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
+			activeTasks = append(activeTasks, indexingTask)
+
+			log.Infow("---- setup.NewIPNITask")
+			ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
+			activeTasks = append(activeTasks, ipniTask)
+		}
 
 		if cfg.HTTP.Enable {
+			log.Infow("---- setup.StartHTTPServer")
 			err = cuhttp.StartHTTPServer(ctx, dependencies)
 			if err != nil {
 				return nil, xerrors.Errorf("failed to start the HTTP server: %w", err)
@@ -372,7 +386,7 @@ func addSealingTasks(
 	}
 
 	if cfg.Subsystems.EnableSendPrecommitMsg {
-		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg)
+		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg, full)
 		activeTasks = append(activeTasks, precommitTask)
 	}
 	if cfg.Subsystems.EnablePoRepProof {
@@ -390,7 +404,7 @@ func addSealingTasks(
 		}
 	}
 	if cfg.Subsystems.EnableSendCommitMsg {
-		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover)
+		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover, full)
 		activeTasks = append(activeTasks, commitTask)
 	}
 
@@ -459,18 +473,24 @@ func machineDetails(deps *deps.Deps, activeTasks []harmonytask.TaskInterface, ma
 		}
 
 		for _, miner := range miners {
-			var myPostIsHandled bool
+			var myWdPostIsHandled bool
+			var myWinPostIsHandled bool
 			for _, m := range allMachines {
 				if !lo.Contains(strings.Split(m.Miners, ","), miner) {
 					continue
 				}
-				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") && lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
-					myPostIsHandled = true
-					break
+				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") {
+					myWdPostIsHandled = true
+				}
+				if lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
+					myWinPostIsHandled = true
 				}
 			}
-			if !myPostIsHandled {
-				log.Errorf("No PoSt tasks are running for miner %s. Start handling PoSts immediately with:\n\tcurio run --layers=\"post\" ", miner)
+			if !myWdPostIsHandled {
+				log.Errorf("No WdPoSt tasks are running for miner %s. Start handling WdPoSts immediately with:\n\tcurio run --layers=\"wdpost\" ", miner)
+			}
+			if !myWinPostIsHandled {
+				log.Errorf("No WinPoSt tasks are running for miner %s. Start handling WinPoSts immediately with:\n\tcurio run --layers=\"winpost\" ", miner)
 			}
 		}
 	}

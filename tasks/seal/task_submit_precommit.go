@@ -42,22 +42,24 @@ type SubmitPrecommitTaskApi interface {
 }
 
 type SubmitPrecommitTask struct {
-	sp     *SealPoller
-	db     *harmonydb.DB
-	api    SubmitPrecommitTaskApi
-	sender *message.Sender
-	as     *multictladdr.MultiAddressSelector
-	feeCfg *config.CurioFees
+	sp      *SealPoller
+	db      *harmonydb.DB
+	api     SubmitPrecommitTaskApi
+	fullApi api.FullNode
+	sender  *message.Sender
+	as      *multictladdr.MultiAddressSelector
+	feeCfg  *config.CurioFees
 }
 
-func NewSubmitPrecommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitPrecommitTaskApi, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig) *SubmitPrecommitTask {
+func NewSubmitPrecommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitPrecommitTaskApi, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, fullApi api.FullNode) *SubmitPrecommitTask {
 	return &SubmitPrecommitTask{
-		sp:     sp,
-		db:     db,
-		api:    api,
-		sender: sender,
-		as:     as,
-		feeCfg: &cfg.Fees,
+		sp:      sp,
+		db:      db,
+		api:     api,
+		fullApi: fullApi,
+		sender:  sender,
+		as:      as,
+		feeCfg:  &cfg.Fees,
 	}
 }
 
@@ -145,6 +147,7 @@ func (s *SubmitPrecommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bo
 	// 2. Prepare preCommit info and PreCommitSectorBatchParams
 	for _, sectorParams := range sectorParamsArr {
 		sectorParams := sectorParams
+		log.Infow("----SubmitPrecommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
 
 		// Check miner ID is same for all sectors in batch
 		tmpMaddr, err := address.NewIDAddress(uint64(sectorParams.SpID))

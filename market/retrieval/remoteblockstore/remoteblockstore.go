@@ -6,6 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
+	txcarlib "github.com/solopine/txcar/txcar"
+	"golang.org/x/exp/slices"
+	"golang.org/x/xerrors"
 	"io"
 
 	"github.com/hashicorp/go-multierror"
@@ -109,6 +113,31 @@ func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block,
 	}
 	if len(pieces) == 0 {
 		return nil, fmt.Errorf("no pieces with cid %s found", c)
+	}
+
+	slices.SortFunc(pieces, func(a, b indexstore.PieceInfo) int {
+		return bytes.Compare(a.PieceCid.Bytes(), b.PieceCid.Bytes())
+	})
+
+	//txPiece, err := txcar.GetTxPieceFromDb(ctx, ps.db, pieces[0])
+	txPiece, err := txcar.GetTxPieceFromDbByPiece(ctx, ro.db, pieces[0].PieceCid)
+	if err != nil {
+		return nil, err
+	}
+	if txPiece != nil {
+		offset, err := ro.idxApi.GetOffset(ctx, txPiece.PieceCid, c.Hash())
+		if err != nil {
+			return nil, err
+		}
+		log.Infow("----txPiece GetOffset", "pieceCid", txPiece.PieceCid.String(), "hash", c.Hash().String(), "offset", offset, "size", pieces[0].BlockSize)
+
+		blockData, err := txcarlib.TxBlockGetDefault(ctx, txPiece.CarKey, offset, pieces[0].BlockSize, txPiece.Version)
+		if err != nil {
+			return nil, err
+		}
+		return blocks.NewBlockWithCid(blockData, c)
+	} else {
+		return nil, xerrors.Errorf("block get not supported: pieceCid=%s, hash=%s, size=%d", txPiece.PieceCid.String(), c.Hash().String(), pieces[0].BlockSize)
 	}
 
 	// Get a reader over one of the pieces and extract the block data
