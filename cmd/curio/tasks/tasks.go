@@ -347,7 +347,9 @@ func addSealingTasks(
 		sdrMax := taskhelp.Max(cfg.Subsystems.SealSDRMaxTasks)
 
 		sdrTask := seal.NewSDRTask(full, db, sp, slr, sdrMax, cfg.Subsystems.SealSDRMinTasks)
-		keyTask := unseal.NewTaskUnsealSDR(slr, db, sdrMax, full)
+
+		keyMax := taskhelp.Max(cfg.Subsystems.SealSDRMaxTasks)
+		keyTask := unseal.NewTaskUnsealSDR(slr, db, keyMax, full)
 
 		activeTasks = append(activeTasks, sdrTask, keyTask)
 	}
@@ -364,7 +366,7 @@ func addSealingTasks(
 	}
 
 	if cfg.Subsystems.EnableSendPrecommitMsg {
-		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg)
+		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg, full)
 		activeTasks = append(activeTasks, precommitTask)
 	}
 	if cfg.Subsystems.EnablePoRepProof {
@@ -382,7 +384,7 @@ func addSealingTasks(
 		}
 	}
 	if cfg.Subsystems.EnableSendCommitMsg {
-		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover)
+		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover, full)
 		activeTasks = append(activeTasks, commitTask)
 	}
 

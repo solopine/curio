@@ -21,6 +21,7 @@ import (
 	"github.com/filecoin-project/curio/cmd/curio/tasks"
 	"github.com/filecoin-project/curio/deps"
 	"github.com/filecoin-project/curio/harmony/harmonydb"
+	addr "github.com/filecoin-project/go-address"
 )
 
 var testCmd = &cli.Command{
@@ -249,15 +250,38 @@ It will not send any messages to the chain. Since it can compute any deadline, o
 		di := dline.NewInfo(head.Height(), cctx.Uint64("deadline"), 0, 0, 0, 10 /*challenge window*/, 0, 0)
 
 		for maddr := range deps.Maddrs {
-			out, err := wdPostTask.DoPartition(ctx, head, address.Address(maddr), di, cctx.Uint64("partition"), true)
+			amid, err := addr.IDFromAddress(addr.Address(maddr))
 			if err != nil {
-				fmt.Println("Error computing WindowPoSt for miner", maddr, err)
+				fmt.Println("Error IDFromAddress", addr.Address(maddr).String(), err)
 				continue
 			}
-			fmt.Println("Computed WindowPoSt for miner", maddr, ":")
+
+			fmt.Println("begin Computed WindowPoSt for miner", amid)
+
+			out, err := wdPostTask.DoPartition(ctx, head, address.Address(maddr), di, cctx.Uint64("partition"), true)
+			if err != nil {
+				fmt.Println("Error computing WindowPoSt for miner", amid, err)
+				continue
+			}
+
+			for _, partition := range out.Partitions {
+				c, err := partition.Skipped.Count()
+				if err != nil {
+					fmt.Println("partition.Skipped.Count", amid, err)
+					continue
+				}
+				secs, err := out.Partitions[0].Skipped.All(c)
+				if err != nil {
+					fmt.Println("partition.Skipped.All", amid, err)
+					continue
+				}
+				fmt.Println("skipped for miner", amid, ":", secs)
+			}
+
+			fmt.Println("Computed WindowPoSt for miner", amid, ":")
 			err = json.NewEncoder(os.Stdout).Encode(out)
 			if err != nil {
-				fmt.Println("Could not encode WindowPoSt output for miner", maddr, err)
+				fmt.Println("Could not encode WindowPoSt output for miner", amid, err)
 				continue
 			}
 		}

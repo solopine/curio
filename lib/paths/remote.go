@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/curio/harmony/harmonydb"
+	"github.com/filecoin-project/curio/txcar"
+	"github.com/google/uuid"
+	"github.com/solopine/txcar/txcar/cache"
 	"io"
 	"math/bits"
 	"net/http"
@@ -45,6 +49,7 @@ type Remote struct {
 	fetching map[abi.SectorID]chan struct{}
 
 	pfHandler PartialFileHandler
+	harmonyDB *harmonydb.DB
 }
 
 func (r *Remote) RemoveCopies(ctx context.Context, s abi.SectorID, typ storiface.SectorFileType) error {
@@ -79,7 +84,7 @@ func (r *Remote) RemoveCopies(ctx context.Context, s abi.SectorID, typ storiface
 	return r.Remove(ctx, s, typ, true, keep)
 }
 
-func NewRemote(local Store, index SectorIndex, auth http.Header, fetchLimit int, pfHandler PartialFileHandler) *Remote {
+func NewRemote(local Store, index SectorIndex, auth http.Header, fetchLimit int, pfHandler PartialFileHandler, db *harmonydb.DB) *Remote {
 	return &Remote{
 		local: local,
 		index: index,
@@ -89,6 +94,7 @@ func NewRemote(local Store, index SectorIndex, auth http.Header, fetchLimit int,
 
 		fetching:  map[abi.SectorID]chan struct{}{},
 		pfHandler: pfHandler,
+		harmonyDB: db,
 	}
 }
 
@@ -335,6 +341,7 @@ func (r *Remote) MoveStorage(ctx context.Context, s storiface.SectorRef, types s
 }
 
 func (r *Remote) Remove(ctx context.Context, sid abi.SectorID, typ storiface.SectorFileType, force bool, keepIn []storiface.ID) error {
+	log.Infow("Remote.Remove", "sid", sid, "typ", typ, "force", force, "keepIn", keepIn)
 	if bits.OnesCount(uint(typ)) != 1 {
 		return xerrors.New("delete expects one file type")
 	}
@@ -356,6 +363,7 @@ storeLoop:
 			}
 		}
 		for _, url := range info.URLs {
+			log.Infow("Remote.Remove.deleteFromRemote", "sid", sid, "typ", typ, "force", force, "keepIn", keepIn, "url", url)
 			if err := r.deleteFromRemote(ctx, url, keepIn); err != nil {
 				log.Warnf("remove %s: %+v", url, err)
 				continue
@@ -518,6 +526,19 @@ func (r *Remote) readRemote(ctx context.Context, url string, offset, size abi.Pa
 func (r *Remote) CheckIsUnsealed(ctx context.Context, s storiface.SectorRef, offset, size abi.PaddedPieceSize) (bool, error) {
 	ft := storiface.FTUnsealed
 
+	txPiece, err := txcar.GetTxPieceFromDbBySector(ctx, r.harmonyDB, s.ID)
+	if err != nil {
+		return false, err
+	}
+	if txPiece != nil {
+		// is tx car
+		log.Infow("CheckIsUnsealed.isTxCar", "s", s, "txPiece", txPiece)
+		return true, nil
+	} else {
+		// is regular, continue
+		log.Infow("CheckIsUnsealed.isNotTxCar", "s", s, "err", err)
+	}
+
 	paths, _, err := r.local.AcquireSector(ctx, s, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
 	if err != nil {
 		return false, xerrors.Errorf("acquire local: %w", err)
@@ -603,7 +624,79 @@ func (r *Remote) CheckIsUnsealed(ctx context.Context, s storiface.SectorRef, off
 // 2. no worker(local worker included) has the unsealed piece in their unsealed sector file.
 // Will return a nil reader and a nil error in such a case.
 func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size abi.PaddedPieceSize) (func(startOffsetAligned, endOffsetAligned storiface.PaddedByteIndex) (io.ReadCloser, error), error) {
+	fmt.Printf("----Remote.Reader. s:%x\n", s)
 	ft := storiface.FTUnsealed
+
+	txPiece, err := txcar.GetTxPieceFromDbBySector(ctx, r.harmonyDB, s.ID)
+	if err != nil {
+		return nil, xerrors.Errorf("txcar.GetTxPieceFromDbBySector. s.id:%d, err: %w", s.ID, err)
+	}
+	if txPiece != nil {
+		reqId := uuid.New()
+		// is tx car
+		log.Infow("Reader.isTxCar", "reqId", reqId, "s", s, "txPiece", txPiece)
+
+		ssize, err := s.ProofType.SectorSize()
+		if err != nil {
+			return nil, err
+		}
+
+		serveDone := make(chan struct{}, 1)
+		unsealedFilePath, err := cache.GetTxCarUnsealedCache(reqId, *txPiece, serveDone)
+		if err != nil {
+			return nil, xerrors.Errorf("txcar.NewTxCarUnsealedFile: %w", err)
+		}
+		pf, err := r.pfHandler.OpenPartialFile(abi.PaddedPieceSize(ssize), unsealedFilePath)
+		if err != nil {
+			return nil, xerrors.Errorf("txcar.opening partial file: %w", err)
+		}
+		log.Debugf("txcar.local partial file opened %s (+%d,%d)", unsealedFilePath, offset, size)
+
+		done := func() error {
+			log.Infow("txcar.closing partial file", "reqId", reqId, "path", unsealedFilePath)
+			err := pf.Close()
+			if err != nil {
+				log.Errorw("txcar.closing idle partial file", "reqId", reqId, "path", unsealedFilePath, "error", err)
+				return err
+			}
+			serveDone <- struct{}{}
+			return nil
+		}
+
+		// even though we have an unsealed file for the given sector, we still need to determine if we have the unsealed piece
+		// in the unsealed sector file. That is what `HasAllocated` checks for.
+		has, err := r.pfHandler.HasAllocated(pf, storiface.UnpaddedByteIndex(offset.Unpadded()), size.Unpadded())
+		if err != nil {
+			return nil, xerrors.Errorf("txcar.has allocated: %w", err)
+		}
+		log.Debugf("txcar.check if partial file is allocated %s (+%d,%d)", unsealedFilePath, offset, size)
+		log.Debugf("txcar.miner has unsealed file but not unseal piece, %s (+%d,%d)", unsealedFilePath, offset, size)
+		if !has {
+			if err := done(); err != nil {
+				return nil, xerrors.Errorf("txcar.done: %w", err)
+			}
+			log.Debugf("txcar.returning nil reader, did not find unsealed piece for %+v (+%d,%d)", s, offset, size)
+			return nil, nil
+		}
+		return func(startOffsetAligned, endOffsetAligned storiface.PaddedByteIndex) (io.ReadCloser, error) {
+			r, err := r.pfHandler.Reader(pf, storiface.PaddedByteIndex(offset)+startOffsetAligned, abi.PaddedPieceSize(endOffsetAligned-startOffsetAligned))
+			if err != nil {
+				return nil, err
+			}
+
+			return struct {
+				io.Reader
+				io.Closer
+			}{
+				Reader: r,
+				Closer: funcCloser(done),
+			}, nil
+		}, nil
+
+	} else {
+		// is regular, continue
+		log.Infow("Reader.isNotTxCar", "s", s, "err", err)
+	}
 
 	// check if we have the unsealed sector file locally
 	paths, _, err := r.local.AcquireSector(ctx, s, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
@@ -780,11 +873,12 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 // ReaderSeq creates a simple sequential reader for a file. Does not work for
 // file types which are a directory (e.g. FTCache).
 func (r *Remote) ReaderSeq(ctx context.Context, s storiface.SectorRef, ft storiface.SectorFileType) (io.ReadCloser, error) {
+	log.Infow("----ReaderSeq", "s", s, "ft", ft)
 	paths, _, err := r.local.AcquireSector(ctx, s, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
 	if err != nil {
 		return nil, xerrors.Errorf("acquire local: %w", err)
 	}
-
+	log.Infow("----ReaderSeq.1", "paths", paths)
 	path := storiface.PathByType(paths, ft)
 	if path != "" {
 		return os.Open(path)
@@ -803,6 +897,7 @@ func (r *Remote) ReaderSeq(ctx context.Context, s storiface.SectorRef, ft storif
 	sort.Slice(si, func(i, j int) bool {
 		return si[i].Weight > si[j].Weight
 	})
+	log.Infow("----ReaderSeq.2", "si", si)
 
 	for _, info := range si {
 		for _, url := range info.URLs {

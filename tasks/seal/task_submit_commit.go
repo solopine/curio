@@ -58,17 +58,18 @@ type commitConfig struct {
 }
 
 type SubmitCommitTask struct {
-	sp     *SealPoller
-	db     *harmonydb.DB
-	api    SubmitCommitAPI
-	prover storiface.Prover
+	sp      *SealPoller
+	db      *harmonydb.DB
+	api     SubmitCommitAPI
+	prover  storiface.Prover
+	fullApi api.FullNode
 
 	sender *message.Sender
 	as     *multictladdr.MultiAddressSelector
 	cfg    commitConfig
 }
 
-func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, prover storiface.Prover) *SubmitCommitTask {
+func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, sender *message.Sender, as *multictladdr.MultiAddressSelector, cfg *config.CurioConfig, prover storiface.Prover, fullApi api.FullNode) *SubmitCommitTask {
 
 	cnfg := commitConfig{
 		feeCfg:                     &cfg.Fees,
@@ -77,13 +78,14 @@ func NewSubmitCommitTask(sp *SealPoller, db *harmonydb.DB, api SubmitCommitAPI, 
 	}
 
 	return &SubmitCommitTask{
-		sp:     sp,
-		db:     db,
-		api:    api,
-		prover: prover,
-		sender: sender,
-		as:     as,
-		cfg:    cnfg,
+		sp:      sp,
+		db:      db,
+		api:     api,
+		prover:  prover,
+		fullApi: fullApi,
+		sender:  sender,
+		as:      as,
+		cfg:     cnfg,
 	}
 }
 
@@ -159,6 +161,8 @@ func (s *SubmitCommitTask) Do(taskID harmonytask.TaskID, stillOwned func() bool)
 
 	for _, sectorParams := range sectorParamsArr {
 		sectorParams := sectorParams
+
+		log.Infow("----SubmitCommitTask.do", "taskID", taskID, "sectorParams", sectorParams)
 
 		// Check miner ID is same for all sectors in batch
 		tmpMaddr, err := address.NewIDAddress(uint64(sectorParams.SpID))
