@@ -17,7 +17,7 @@ import (
 	"github.com/filecoin-project/curio/harmony/harmonydb"
 )
 
-var LOOKS_DEAD_TIMEOUT = 10 * time.Minute // Time w/o minute heartbeats
+var LOOKS_DEAD_TIMEOUT = 30 * time.Minute // Time w/o minute heartbeats
 
 type Resources struct {
 	Cpu       int
@@ -79,6 +79,7 @@ func Register(db *harmonydb.DB, hostnameAndPort string) (*Reg, error) {
 		if ownerID == nil {
 			return nil, xerrors.Errorf("no owner id")
 		}
+		logger.Infow("----Register", "ownerID", ownerID, "hostnameAndPort", hostnameAndPort)
 
 		reg.MachineID = *ownerID
 
@@ -88,10 +89,14 @@ func Register(db *harmonydb.DB, hostnameAndPort string) (*Reg, error) {
 	go func() {
 		for {
 			time.Sleep(time.Minute)
+			//logger.Infow("----Register.keeplive", "reg.MachineID", reg.MachineID)
 			if reg.shutdown.Load() {
+				logger.Infow("----Register.keeplive.shutdown")
 				return
 			}
+			//logger.Infow("----Register.keeplive2", "reg.MachineID", reg.MachineID)
 			_, err := db.Exec(ctx, `UPDATE harmony_machines SET last_contact=CURRENT_TIMESTAMP where id=$1`, reg.MachineID)
+			//logger.Infow("----Register.keeplive.done", "reg.MachineID", reg.MachineID)
 			if err != nil {
 				logger.Error("Cannot keepalive ", err)
 			}
@@ -145,7 +150,7 @@ func getResources() (res Resources, err error) {
 
 	res = Resources{
 		Cpu: runtime.NumCPU(),
-		Ram: mem.Available,
+		Ram: mem.Total - 64*1024*1024*1024, //64G for buf
 		Gpu: getGPUDevices(),
 	}
 

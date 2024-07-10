@@ -98,8 +98,8 @@ func TestMoveShared(t *testing.T) {
 	id1 := createTestStorage(t, dirStor, false, ls1, ls2)
 	id2 := createTestStorage(t, dirSeal, true, ls1)
 
-	rs1 := paths.NewRemote(ls1, index, nil, 20, &paths.DefaultPartialFileHandler{})
-	rs2 := paths.NewRemote(ls2, index, nil, 20, &paths.DefaultPartialFileHandler{})
+	rs1 := paths.NewRemote(ls1, index, nil, 20, &paths.DefaultPartialFileHandler{}, nil)
+	rs2 := paths.NewRemote(ls2, index, nil, 20, &paths.DefaultPartialFileHandler{}, nil)
 	_ = rs2
 	mux1.PathPrefix("/").Handler(&paths.FetchHandler{Local: ls1, PfHandler: &paths.DefaultPartialFileHandler{}})
 	mux2.PathPrefix("/").Handler(&paths.FetchHandler{Local: ls2, PfHandler: &paths.DefaultPartialFileHandler{}})
@@ -457,7 +457,7 @@ func TestReader(t *testing.T) {
 				tc.indexFnc(index, tc.serverUrl)
 			}
 
-			remoteStore := paths.NewRemote(lstore, index, nil, 6000, pfhandler)
+			remoteStore := paths.NewRemote(lstore, index, nil, 6000, pfhandler, nil)
 
 			rdg, err := remoteStore.Reader(ctx, sectorRef, offset, size)
 			var rd io.ReadCloser
@@ -760,7 +760,7 @@ func TestCheckIsUnsealed(t *testing.T) {
 				tc.indexFnc(index, tc.serverUrl)
 			}
 
-			remoteStore := paths.NewRemote(lstore, index, nil, 6000, pfhandler)
+			remoteStore := paths.NewRemote(lstore, index, nil, 6000, pfhandler, nil)
 
 			isUnsealed, err := remoteStore.CheckIsUnsealed(ctx, sectorRef, offset, size)
 

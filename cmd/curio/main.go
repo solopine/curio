@@ -41,6 +41,10 @@ func SetupLogLevels() {
 		_ = logging.SetLogLevel("*", "INFO")
 		_ = logging.SetLogLevel("harmonytask", "DEBUG")
 		_ = logging.SetLogLevel("rpc", "ERROR")
+		_ = logging.SetLogLevel("stores", "DEBUG")
+		_ = logging.SetLogLevel("cu/ffi", "DEBUG")
+		_ = logging.SetLogLevel("cu/seal", "DEBUG")
+		_ = logging.SetLogLevel("curio/message", "DEBUG")
 	}
 }
 

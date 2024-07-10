@@ -249,11 +249,13 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 			go libp2p.NewDealProvider(ctx, db, cfg, dm.MK12Handler, full, sender, miners, machine, shutdownChan)
 		}
 
-		idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
+		if cfg.HTTP.Enable {
+			idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
 
-		indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
-		ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
-		activeTasks = append(activeTasks, ipniTask, indexingTask)
+			indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
+			ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
+			activeTasks = append(activeTasks, ipniTask, indexingTask)
+		}
 
 		if cfg.HTTP.Enable {
 			err = cuhttp.StartHTTPServer(ctx, dependencies)
@@ -347,7 +349,9 @@ func addSealingTasks(
 		sdrMax := taskhelp.Max(cfg.Subsystems.SealSDRMaxTasks)
 
 		sdrTask := seal.NewSDRTask(full, db, sp, slr, sdrMax, cfg.Subsystems.SealSDRMinTasks)
-		keyTask := unseal.NewTaskUnsealSDR(slr, db, sdrMax, full)
+
+		keyMax := taskhelp.Max(cfg.Subsystems.SealSDRMaxTasks)
+		keyTask := unseal.NewTaskUnsealSDR(slr, db, keyMax, full)
 
 		activeTasks = append(activeTasks, sdrTask, keyTask)
 	}
@@ -364,7 +368,7 @@ func addSealingTasks(
 	}
 
 	if cfg.Subsystems.EnableSendPrecommitMsg {
-		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg)
+		precommitTask := seal.NewSubmitPrecommitTask(sp, db, full, sender, as, cfg, full)
 		activeTasks = append(activeTasks, precommitTask)
 	}
 	if cfg.Subsystems.EnablePoRepProof {
@@ -382,7 +386,7 @@ func addSealingTasks(
 		}
 	}
 	if cfg.Subsystems.EnableSendCommitMsg {
-		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover)
+		commitTask := seal.NewSubmitCommitTask(sp, db, full, sender, as, cfg, prover, full)
 		activeTasks = append(activeTasks, commitTask)
 	}
 
@@ -451,18 +455,24 @@ func machineDetails(deps *deps.Deps, activeTasks []harmonytask.TaskInterface, ma
 		}
 
 		for _, miner := range miners {
-			var myPostIsHandled bool
+			var myWdPostIsHandled bool
+			var myWinPostIsHandled bool
 			for _, m := range allMachines {
 				if !lo.Contains(strings.Split(m.Miners, ","), miner) {
 					continue
 				}
-				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") && lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
-					myPostIsHandled = true
-					break
+				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") {
+					myWdPostIsHandled = true
+				}
+				if lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
+					myWinPostIsHandled = true
 				}
 			}
-			if !myPostIsHandled {
-				log.Errorf("No PoSt tasks are running for miner %s. Start handling PoSts immediately with:\n\tcurio run --layers=\"post\" ", miner)
+			if !myWdPostIsHandled {
+				log.Errorf("No WdPoSt tasks are running for miner %s. Start handling WdPoSts immediately with:\n\tcurio run --layers=\"wdpost\" ", miner)
+			}
+			if !myWinPostIsHandled {
+				log.Errorf("No WinPoSt tasks are running for miner %s. Start handling WinPoSts immediately with:\n\tcurio run --layers=\"winpost\" ", miner)
 			}
 		}
 	}

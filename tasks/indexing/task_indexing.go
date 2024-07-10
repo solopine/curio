@@ -3,8 +3,11 @@ package indexing
 import (
 	"bufio"
 	"context"
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/solopine/txcar/txcar"
+	txcarcommon "github.com/solopine/txcar/txcar/common"
 	"io"
 	"time"
 
@@ -27,6 +30,8 @@ import (
 	"github.com/filecoin-project/curio/lib/pieceprovider"
 	"github.com/filecoin-project/curio/lib/storiface"
 	"github.com/filecoin-project/curio/market/indexstore"
+
+	txcarlib "github.com/filecoin-project/curio/txcar"
 )
 
 var log = logging.Logger("indexing")
@@ -134,6 +139,17 @@ func (i *IndexingTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 		return false, xerrors.Errorf("parsing piece CID: %w", err)
 	}
 
+	txPiece, err := txcarlib.GetTxPieceFromDbByPiece(ctx, i.db, pieceCid)
+	if err != nil {
+		return false, err
+	}
+	if txPiece != nil {
+		log.Infow("----txPiece indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+		return i.indexForTxPiece(ctx, taskID, task, txPiece)
+	}
+
+	log.Infow("----txPiece indexForNormal", "pieceCid", txPiece.PieceCid.String())
+
 	reader, err := i.pieceProvider.ReadPiece(ctx, storiface.SectorRef{
 		ID: abi.SectorID{
 			Miner:  abi.ActorID(task.SpID),
@@ -197,6 +213,82 @@ loop:
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("generating index for piece: %w", err)
+	}
+
+	// Close the channel
+	close(recs)
+
+	// Wait till AddIndex is finished
+	err = eg.Wait()
+	if err != nil {
+		return false, xerrors.Errorf("adding index to DB (interrupted %t): %w", interrupted, err)
+	}
+
+	log.Infof("Indexing deal %s took %0.3f seconds", task.UUID, time.Since(startTime).Seconds())
+
+	err = i.recordCompletion(ctx, task, taskID, true)
+	if err != nil {
+		return false, err
+	}
+
+	blocksPerSecond := float64(blocks) / time.Since(start).Seconds()
+	log.Infow("Piece indexed", "piece_cid", task.PieceCid, "uuid", task.UUID, "sp_id", task.SpID, "sector", task.Sector, "blocks", blocks, "blocks_per_second", blocksPerSecond)
+
+	return true, nil
+}
+
+func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.TaskID, task itask, txPiece *txcar.TxPiece) (done bool, err error) {
+	if txPiece == nil {
+		return false, xerrors.Errorf("cannot call indexForTxPiece with txPiece==nil")
+	}
+
+	if txPiece.Version == txcarcommon.V1 {
+		log.Infow("----txPiece V1 indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+		return true, nil
+	}
+
+	log.Infow("----txPiece indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+
+	startTime := time.Now()
+
+	allRecs, err := i.parseRecordsForTxPiece(ctx, task, txPiece.PieceCid)
+	if err != nil {
+		return false, err
+	}
+
+	dealCfg := i.cfg.Market.StorageMarketConfig
+	chanSize := dealCfg.Indexing.InsertConcurrency * dealCfg.Indexing.InsertBatchSize
+	recs := make(chan indexstore.Record, chanSize)
+
+	var eg errgroup.Group
+	addFail := make(chan struct{})
+	var interrupted bool
+	var blocks int64
+	start := time.Now()
+
+	eg.Go(func() error {
+		defer close(addFail)
+
+		serr := i.indexStore.AddIndex(ctx, txPiece.PieceCid, recs)
+		if serr != nil {
+			return xerrors.Errorf("adding index to DB: %w", serr)
+		}
+		return nil
+	})
+
+	for _, rec := range allRecs {
+		blocks++
+
+		select {
+		case recs <- indexstore.Record{
+			Cid:    rec.Cid,
+			Offset: rec.Offset,
+			Size:   rec.Size,
+		}:
+		case <-addFail:
+			interrupted = true
+			break
+		}
 	}
 
 	// Close the channel
@@ -387,6 +479,49 @@ func (i *IndexingTask) GetSpid(db *harmonydb.DB, taskID int64) string {
 		return ""
 	}
 	return spid
+}
+
+func (i *IndexingTask) parseRecordsForTxPiece(ctx context.Context, task itask, pieceCid cid.Cid) ([]indexstore.Record, error) {
+	log.Infow("ParseRecordsForTxPiece", "minerAddr", abi.ActorID(task.SpID).String(), "task.Sector", task.Sector, "pieceCid", pieceCid)
+
+	reader, err := i.pieceProvider.TxReadUnsealed(ctx, storiface.SectorRef{
+		ID: abi.SectorID{
+			Miner:  abi.ActorID(task.SpID),
+			Number: task.Sector,
+		},
+		ProofType: task.Proof,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	dec := gob.NewDecoder(reader)
+
+	// 1. read txpiece
+	var txPiece txcar.TxPiece
+	if err := dec.Decode(&txPiece); err != nil {
+		return nil, err
+	}
+	if txPiece.PieceCid != pieceCid {
+		return nil, xerrors.Errorf("pieceCid error. pieceCid in file: %s, pieceCid expected: %s", txPiece.PieceCid, pieceCid)
+	}
+
+	// 2. read txRecs
+	var txRecs []txcar.TxBlockRecord
+	if err := dec.Decode(&txRecs); err != nil {
+		return nil, err
+	}
+
+	recs := make([]indexstore.Record, 0, len(txRecs))
+	for _, txRec := range txRecs {
+		recs = append(recs, indexstore.Record{
+			Cid:    txRec.Cid,
+			Offset: txRec.Offset,
+			Size:   txRec.Size,
+		})
+	}
+
+	return recs, nil
 }
 
 var _ = harmonytask.Reg(&IndexingTask{})

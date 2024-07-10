@@ -199,8 +199,10 @@ func New(
 		}
 		for _, w := range taskRet {
 			// edge-case: if old assignments are not available tasks, unlock them.
+			log.Infow("----old.work", "w.ID", w.ID, "w.Name", w.Name)
 			h := e.taskMap[w.Name]
 			if h == nil || !h.considerWork(WorkSourceRecover, []TaskID{TaskID(w.ID)}) {
+				log.Infow("----old.work.not", "w.ID", w.ID, "w.Name", w.Name)
 				_, err := db.Exec(e.ctx, `UPDATE harmony_task SET owner_id=NULL WHERE id=$1`, w.ID)
 				if err != nil {
 					log.Errorw("Cannot remove self from owner field", "error", err)
@@ -315,6 +317,7 @@ func (e *TaskEngine) poller() {
 
 		ramUsage := 1 - float64(availableResources.Ram)/float64(totalResources.Ram)
 		stats.Record(context.Background(), TaskMeasures.RamUsage.M(ramUsage*100))
+		//log.Infow("----poller", "availableResources", availableResources, "totalResources", totalResources)
 
 	}
 }
@@ -362,11 +365,14 @@ func (e *TaskEngine) followWorkInDB() {
 
 // pollerTryAllWork starts the next 1 task
 func (e *TaskEngine) pollerTryAllWork() bool {
+	//log.Info("----pollerTryAllWork")
 	if time.Since(e.lastCleanup.Load().(time.Time)) > CLEANUP_FREQUENCY {
 		e.lastCleanup.Store(time.Now())
 		resources.CleanupMachines(e.ctx, e.db)
 	}
+
 	for _, v := range e.handlers {
+		//log.Infow("----pollerTryAllWork", "handler", v.Name)
 		if err := v.AssertMachineHasCapacity(); err != nil {
 			log.Debugf("skipped scheduling %s type tasks on due to %s", v.Name, err.Error())
 			continue
@@ -399,8 +405,10 @@ func (e *TaskEngine) pollerTryAllWork() bool {
 			}
 		})
 
+		//log.Infow("----pollerTryAllWork", "len(unownedTasks)", len(unownedTasks))
 		if len(unownedTasks) > 0 {
 			accepted := v.considerWork(WorkSourcePoller, unownedTasks)
+			log.Infow("----pollerTryAllWork", "accepted", accepted)
 			if accepted {
 				return true // accept new work slowly and in priority order
 			}
@@ -442,8 +450,10 @@ var rlog = logging.Logger("harmony-res")
 // ResourcesAvailable determines what resources are still unassigned.
 func (e *TaskEngine) ResourcesAvailable() resources.Resources {
 	tmp := e.reg.Resources
+	//log.Debugw("----ResourcesAvailable", "reg.Resources", tmp)
 	for _, t := range e.handlers {
 		ct := t.Max.ActiveThis()
+		//log.Debugw("----ResourcesAvailable.1", "t", t.Name, "ct", ct, "t.Cost.Cpu", t.Cost.Cpu, "t.Cost.Gpu", t.Cost.Gpu, "t.Cost.Ram", t.Cost.Ram)
 		tmp.Cpu -= ct * t.Cost.Cpu
 		tmp.Gpu -= float64(ct) * t.Cost.Gpu
 		tmp.Ram -= uint64(ct) * t.Cost.Ram

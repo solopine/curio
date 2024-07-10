@@ -185,12 +185,14 @@ func (r *Remote) GenerateSingleVanillaProof(ctx context.Context, minerID abi.Act
 }
 
 func (r *Remote) GeneratePoRepVanillaProof(ctx context.Context, sr storiface.SectorRef, sealed, unsealed cid.Cid, ticket abi.SealRandomness, seed abi.InteractiveSealRandomness) ([]byte, error) {
+	log.Infow("----GeneratePoRepVanillaProof.1", "sr", sr)
 	// Attempt to generate the proof locally first
 	p, err := r.local.GeneratePoRepVanillaProof(ctx, sr, sealed, unsealed, ticket, seed)
 	if err != errPathNotFound {
 		return p, err
 	}
 
+	log.Infow("----GeneratePoRepVanillaProof.2", "sr", sr)
 	// Define the file types to look for based on the sector's state
 	ft := storiface.FTSealed | storiface.FTCache
 
@@ -200,6 +202,7 @@ func (r *Remote) GeneratePoRepVanillaProof(ctx context.Context, sr storiface.Sec
 		return nil, xerrors.Errorf("finding sector %d failed: %w", sr.ID, err)
 	}
 
+	log.Infow("----GeneratePoRepVanillaProof.3", "sr", sr, "si", si)
 	// Prepare request parameters
 	requestParams := PoRepVanillaParams{
 		Sector:   sr,
@@ -220,6 +223,7 @@ func (r *Remote) GeneratePoRepVanillaProof(ctx context.Context, sr storiface.Sec
 		for _, u := range info.BaseURLs {
 			url := fmt.Sprintf("%s/vanilla/porep", u)
 
+			log.Infow("----GeneratePoRepVanillaProof.4", "sr", sr, "url", url)
 			// Create and send the request
 			req, err := http.NewRequest("POST", url, strings.NewReader(string(jreq)))
 			if err != nil {
@@ -241,6 +245,7 @@ func (r *Remote) GeneratePoRepVanillaProof(ctx context.Context, sr storiface.Sec
 				log.Warnw("GeneratePoRepVanillaProof do request failed", "url", url, "error", err)
 				continue
 			}
+			log.Infow("----GeneratePoRepVanillaProof.5", "sr", sr, "resp.StatusCode", resp.StatusCode)
 
 			// Handle non-OK status codes
 			if resp.StatusCode != http.StatusOK {
