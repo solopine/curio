@@ -122,7 +122,12 @@ DO UPDATE SET
 
 func IsAndGetTxCarInfo(ctx context.Context, db *harmonydb.DB, sectorId abi.SectorID) (TxCarInfo, error) {
 	var nilTxCarInfo TxCarInfo
-	var rows []TxCarInfo
+	var rows []struct {
+		CarKey    string
+		PieceCid  string
+		PieceSize int64
+		CarSize   int64
+	}
 	err := db.Select(ctx, &rows, `select tcp.piece_cid,tcp.car_key,tcp.piece_size,tcp.car_size  
 from sectors_meta_pieces smp 
     join tx_car_pieces tcp on smp.piece_cid=tcp.piece_cid 
@@ -134,7 +139,25 @@ where smp.sp_id=$1 and smp.sector_num=$2;`, sectorId.Miner, sectorId.Number)
 	if len(rows) != 1 {
 		return nilTxCarInfo, xerrors.Errorf("IsAndGetTxCarInfo: rows !=1")
 	}
-	return rows[0], nil
+
+	//
+	key, err := uuid.Parse(rows[0].CarKey)
+	if err != nil {
+		return nilTxCarInfo, xerrors.Errorf("IsAndGetTxCarInfo: uuid.Parse. CarKey:%s", rows[0].CarKey)
+	}
+
+	//
+	pieceCid, err := cid.Decode(rows[0].PieceCid)
+	if err != nil {
+		return nilTxCarInfo, xerrors.Errorf("IsAndGetTxCarInfo: uuid.Parse. PieceCid:%s", rows[0].PieceCid)
+	}
+
+	return TxCarInfo{
+		CarKey:    key,
+		PieceCid:  pieceCid,
+		PieceSize: rows[0].PieceSize,
+		CarSize:   rows[0].CarSize,
+	}, nil
 }
 
 func IsTxCarPiece(ctx context.Context, db *harmonydb.DB, pieceCid cid.Cid) (bool, error) {
