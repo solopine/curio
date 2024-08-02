@@ -2,7 +2,10 @@ package paths
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"github.com/filecoin-project/curio/harmony/harmonydb"
+	"github.com/filecoin-project/curio/txcar"
 	"io"
 	"net/http"
 	"os"
@@ -49,6 +52,7 @@ func (d *DefaultPartialFileHandler) Close(pf *partialfile.PartialFile) error {
 type FetchHandler struct {
 	Local     Store
 	PfHandler PartialFileHandler
+	DB        *harmonydb.DB
 }
 
 func (handler *FetchHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) { // /remote/
@@ -249,6 +253,15 @@ func (handler *FetchHandler) remoteGetAllocated(w http.ResponseWriter, r *http.R
 	si := storiface.SectorRef{
 		ID:        id,
 		ProofType: 0,
+	}
+
+	txCarInfo, err := txcar.IsAndGetTxCarInfo(context.Background(), handler.DB, id)
+	if err == nil {
+		log.Infow("AcquireSector.IsAndGetTxCarInfo", "txCarInfo", txCarInfo)
+		w.WriteHeader(http.StatusOK)
+		return
+	} else {
+		log.Infow("AcquireSector.IsAndGetTxCarInfo.NOT", "err", err)
 	}
 
 	// get the path of the local Unsealed file for the given sector.
