@@ -327,7 +327,7 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 		txCarInfo, err := txcar.ParseTxCarInfoFromDeal(deal)
 		if err != nil {
 			isTxCar = false
-			log.Infow("----deal is regular DDO", "piece_cid", deal.PieceCID().String())
+			log.Infow("----deal is regular DDO", "piece_cid", deal.PieceCID().String(), "err", err)
 		} else {
 			isTxCar = true
 			log.Infow("----deal is TX CAR DDO", "piece_cid", deal.PieceCID().String())

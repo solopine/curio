@@ -76,7 +76,10 @@ func ParseTxCarInfo(path string) (TxCarInfo, error) {
 
 func ParseTxCarInfoFromDeal(deal lpiece.PieceDealInfo) (TxCarInfo, error) {
 	var txCarInfo TxCarInfo
-	if deal.PieceActivationManifest == nil || deal.DealProposal == nil {
+	if deal.PieceActivationManifest == nil {
+		return txCarInfo, fmt.Errorf("deal is not a tx car 0")
+	}
+	if deal.DealProposal != nil {
 		return txCarInfo, fmt.Errorf("deal is not a tx car 1")
 	}
 	if len(deal.PieceActivationManifest.Notify) != 1 {
