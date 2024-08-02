@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/filecoin-project/go-padreader"
+	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/google/uuid"
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
@@ -24,7 +26,7 @@ import (
 
 var log = logging.Logger("txcar")
 
-func NewTxCarReader(carKey uuid.UUID) (io.ReadCloser, error) {
+func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
 	var err error
 
 	destDir := "/cartmp"
@@ -33,6 +35,7 @@ func NewTxCarReader(carKey uuid.UUID) (io.ReadCloser, error) {
 		destDir = os.TempDir()
 	}
 
+	carKey := txCarInfo.CarKey
 	deskFile := path.Join(destDir, carKey.String()+".car")
 
 	// make a cid with the right length that we eventually will patch with the root.
@@ -73,34 +76,26 @@ func NewTxCarReader(carKey uuid.UUID) (io.ReadCloser, error) {
 
 	log.Infof("tx car generated: %s\n", carKey.String())
 
+	//////
 	carFile, err := os.Open(deskFile)
 	if err != nil {
 		return nil, err
 	}
 
-	readerCloser := TxCarReader{
-		carFile: carFile,
-		carPath: deskFile,
-	}
-
-	return &readerCloser, nil
-}
-
-type TxCarReader struct {
-	carFile *os.File
-	carPath string
-}
-
-func (r *TxCarReader) Read(p []byte) (n int, err error) {
-	return r.carFile.Read(p)
-}
-
-func (r *TxCarReader) Close() error {
-	err := r.carFile.Close()
+	var unpaddedPieceSize abi.UnpaddedPieceSize
+	unpaddedPieceSize = abi.PaddedPieceSize(txCarInfo.PieceSize).Unpadded()
+	reader, err := padreader.NewInflator(carFile, uint64(txCarInfo.CarSize), unpaddedPieceSize)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to inflate data: %w", err)
 	}
-	return os.Remove(r.carPath)
+
+	return struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: reader,
+		Closer: carFile,
+	}, nil
 }
 
 func writeFilesWithMem(ctx context.Context, noWrap bool, bs *blockstore.ReadWrite, key uuid.UUID) (cid.Cid, error) {
