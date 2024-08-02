@@ -89,13 +89,31 @@ func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("failed to inflate data: %w", err)
 	}
 
-	return struct {
-		io.Reader
-		io.Closer
-	}{
-		Reader: reader,
-		Closer: carFile,
-	}, nil
+	readerCloser := TxCarReader{
+		reader:  reader,
+		carFile: carFile,
+		carPath: deskFile,
+	}
+
+	return &readerCloser, nil
+}
+
+type TxCarReader struct {
+	reader  io.Reader
+	carFile *os.File
+	carPath string
+}
+
+func (r *TxCarReader) Read(p []byte) (n int, err error) {
+	return r.reader.Read(p)
+}
+
+func (r *TxCarReader) Close() error {
+	err := r.carFile.Close()
+	if err != nil {
+		return err
+	}
+	return os.Remove(r.carPath)
 }
 
 func writeFilesWithMem(ctx context.Context, noWrap bool, bs *blockstore.ReadWrite, key uuid.UUID) (cid.Cid, error) {
