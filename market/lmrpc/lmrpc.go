@@ -333,6 +333,12 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 			log.Infow("----deal is TX CAR DDO", "piece_cid", deal.PieceCID().String())
 			// revert PieceActivationManifest.Notify
 			deal.PieceActivationManifest.Notify = nil
+
+			err := txcar.AddDbEntry(ctx, db, txCarInfo)
+			if err != nil {
+				log.Errorw("----txcar.AddDbEntry", "piece_cid", deal.PieceCID().String(), "err", err)
+				return lapi.SectorOffset{}, xerrors.Errorf("txcar add db entry fail")
+			}
 		}
 
 		if (deal.PieceActivationManifest == nil && deal.DealProposal == nil) || (deal.PieceActivationManifest != nil && deal.DealProposal != nil) {

@@ -1,11 +1,16 @@
 package txcar
 
 import (
+	"context"
 	"fmt"
+	"github.com/filecoin-project/curio/harmony/harmonydb"
 	addr "github.com/filecoin-project/go-address"
+	"github.com/filecoin-project/go-state-types/abi"
 	lpiece "github.com/filecoin-project/lotus/storage/pipeline/piece"
 	"github.com/google/uuid"
 	"github.com/ipfs/go-cid"
+	"golang.org/x/xerrors"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -102,4 +107,54 @@ func EncodeTxCarInfo(txCarInfo TxCarInfo) string {
 		txCarInfo.PieceCid.String() + Separator +
 		strconv.FormatInt(txCarInfo.PieceSize, 10) + Separator +
 		strconv.FormatInt(txCarInfo.CarSize, 10)
+}
+
+func AddDbEntry(ctx context.Context, db *harmonydb.DB, txCarInfo TxCarInfo) error {
+	_, err := db.Exec(ctx, `
+insert into tx_car_pieces(piece_cid, car_key, piece_size, car_size) VALUES($1, $2, $3, $4)
+ON CONFLICT(piece_cid) 
+DO UPDATE SET
+  car_key = EXCLUDED.car_key,
+  piece_size = EXCLUDED.piece_size,
+  car_size = EXCLUDED.car_size;`, txCarInfo.PieceCid.String(), txCarInfo.CarKey.String(), txCarInfo.PieceSize, txCarInfo.CarSize)
+	return err
+}
+
+func IsAndGetTxCarInfo(ctx context.Context, db *harmonydb.DB, sectorId abi.SectorID) (TxCarInfo, error) {
+	var nilTxCarInfo TxCarInfo
+	var rows []TxCarInfo
+	err := db.Select(ctx, &rows, `select smp.piece_cid,smp.car_key,smp.piece_size,smp.car_size  
+from sectors_meta_pieces smp 
+    join tx_car_pieces tcp on smp.piece_cid=tcp.piece_cid 
+where smp.sp_id=$1 and smp.sector_num=$2;`, sectorId.Miner, sectorId.Number)
+
+	if err != nil {
+		return nilTxCarInfo, xerrors.Errorf("IsAndGetTxCarInfo: %w", err)
+	}
+	if len(rows) != 1 {
+		return nilTxCarInfo, xerrors.Errorf("IsAndGetTxCarInfo: rows !=1")
+	}
+	return rows[0], nil
+}
+
+func IsTxCarPiece(ctx context.Context, db *harmonydb.DB, pieceCid cid.Cid) (bool, error) {
+	var rowCount int
+	err := db.QueryRow(ctx, "SELECT COUNT(*) FROM tx_car_pieces WHERE piece_cid = $1", pieceCid.String()).Scan(&rowCount)
+	if err != nil {
+		return false, xerrors.Errorf("IsTxCarPiece: %w", err)
+	}
+	return rowCount > 0, nil
+}
+
+func IsTxCarPieceStr(ctx context.Context, db *harmonydb.DB, pieceCidStr string) (bool, error) {
+	pieceCid, err := cid.Decode(pieceCidStr)
+	if err != nil {
+		return false, fmt.Errorf("tx pieceCidStr is invalid:%s", pieceCidStr)
+	}
+	return IsTxCarPiece(ctx, db, pieceCid)
+}
+
+func CreateFakeUnsealedFile(filePath string, txCarInfo TxCarInfo) error {
+	txCarInfoStr := EncodeTxCarInfo(txCarInfo)
+	return os.WriteFile(filePath, []byte(txCarInfoStr), 0755)
 }

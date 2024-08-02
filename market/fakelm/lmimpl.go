@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/filecoin-project/curio/txcar"
 	"net/http"
 	"net/url"
 
@@ -416,6 +417,17 @@ func (l *LMRPCProvider) StorageRedeclareLocal(ctx context.Context, id *storiface
 
 func (l *LMRPCProvider) IsUnsealed(ctx context.Context, sectorNum abi.SectorNumber, offset abi.UnpaddedPieceSize, length abi.UnpaddedPieceSize) (bool, error) {
 	sectorID := abi.SectorID{Miner: l.minerID, Number: sectorNum}
+
+	// if txcar
+	txCarInfo, err := txcar.IsAndGetTxCarInfo(ctx, l.db, sectorID)
+	if err == nil {
+		// txcar
+		log.Infof("IsAndGetTxCarInfo is true: %x", txCarInfo)
+		return true, nil
+	} else {
+		// normal piece, just log and continue
+		log.Infof("IsAndGetTxCarInfo return err: %x", err)
+	}
 
 	si, err := l.si.StorageFindSector(ctx, sectorID, storiface.FTUnsealed, 0, false)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"io"
 	"os"
 	"path/filepath"
@@ -477,7 +478,7 @@ func (sb *SealCalls) LocalStorage(ctx context.Context) ([]storiface.StoragePath,
 	return sb.sectors.localStore.Local(ctx)
 }
 
-func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool) error {
+func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.SectorRef, keepUnsealed bool, isTxCar bool, txCarInfo txcar.TxCarInfo) error {
 	alloc := storiface.FTNone
 	if keepUnsealed {
 		// note: In Curio we don't write the unsealed file in any of the previous stages, it's only written here from tree-d
@@ -496,6 +497,13 @@ func (sb *SealCalls) FinalizeSector(ctx context.Context, sector storiface.Sector
 	}
 
 	if keepUnsealed {
+		if isTxCar {
+			err := txcar.CreateFakeUnsealedFile(sectorPaths.Unsealed, txCarInfo)
+			if err != nil {
+				return xerrors.Errorf("CreateFakeUnsealedFile - %s: %w", sectorPaths.Unsealed, err)
+			}
+			goto afterUnsealedMove
+		}
 		// tree-d contains exactly unsealed data in the prefix, so
 		// * we move it to a temp file
 		// * we truncate the temp file to the sector size

@@ -2,6 +2,7 @@ package seal
 
 import (
 	"context"
+	"github.com/filecoin-project/curio/txcar"
 	"net/url"
 
 	"golang.org/x/xerrors"
@@ -70,17 +71,25 @@ func (f *FinalizeTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 		return false, err
 	}
 
-	var dataUrl string
-	if err := f.db.QueryRow(ctx, `SELECT data_url FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&dataUrl); err != nil {
-		return false, err
-	}
-	goUrl, err := url.Parse(dataUrl)
-	if err != nil {
-		return false, err
-	}
+	isTxCar := false
+	var txCarInfo txcar.TxCarInfo
+	{
+		var dataUrl string
+		if err := f.db.QueryRow(ctx, `SELECT data_url FROM sectors_sdr_initial_pieces WHERE sp_id = $1 AND sector_number = $2`, task.SpID, task.SectorNumber).Scan(&dataUrl); err != nil {
+			return false, err
+		}
+		goUrl, err := url.Parse(dataUrl)
+		if err != nil {
+			return false, err
+		}
 
-	if goUrl.Scheme == "txcar" {
-		keepUnsealed = false
+		if goUrl.Scheme == "txcar" {
+			isTxCar = true
+			txCarInfo, err = txcar.ParseTxCarInfo(goUrl.Opaque)
+			if err != nil {
+				return false, err
+			}
+		}
 	}
 
 	sector := storiface.SectorRef{
@@ -91,7 +100,7 @@ func (f *FinalizeTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (do
 		ProofType: abi.RegisteredSealProof(task.RegSealProof),
 	}
 
-	err = f.sc.FinalizeSector(ctx, sector, keepUnsealed)
+	err = f.sc.FinalizeSector(ctx, sector, keepUnsealed, isTxCar, txCarInfo)
 	if err != nil {
 		return false, xerrors.Errorf("finalizing sector: %w", err)
 	}
