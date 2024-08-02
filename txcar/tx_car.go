@@ -97,7 +97,7 @@ func ParseTxCarInfoFromDeal(deal lpiece.PieceDealInfo) (TxCarInfo, error) {
 }
 
 func EncodeTxCarInfo(txCarInfo TxCarInfo) string {
-	return TxCarKeyPrefix + Separator +
+	return TxCarKeyPrefix +
 		txCarInfo.CarKey.String() + Separator +
 		txCarInfo.PieceCid.String() + Separator +
 		strconv.FormatInt(txCarInfo.PieceSize, 10) + Separator +
