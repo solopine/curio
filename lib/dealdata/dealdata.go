@@ -166,11 +166,13 @@ func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, s
 						reader, _ := padreader.New(pr, uint64(*p.DataRawSize))
 						pieceReaders = append(pieceReaders, reader)
 					} else if goUrl.Scheme == "txcar" {
+						log.Infow("----getDealMetadata.txcar1", "txCarInfoStr", goUrl.Opaque)
 						txCarInfoStr := goUrl.Opaque
 						txCarInfo, err := txcar.ParseTxCarInfo(txCarInfoStr)
 						if err != nil {
 							log.Errorw("---getDealMetadata.ParseTxCarInfo", "txCarInfoStr", txCarInfoStr)
 						}
+						log.Infow("----getDealMetadata.txcar2", "txCarInfo", txCarInfo)
 						rc, err := txcar.NewTxCarReader(txCarInfo)
 						if err != nil {
 							return nil, xerrors.Errorf("NewTxCarReader: %w", err)
