@@ -94,6 +94,7 @@ func (handler *FetchHandler) remoteStatFs(w http.ResponseWriter, r *http.Request
 // remoteGetSector returns the sector file/tared directory byte stream for the sectorID and sector file type sent in the request.
 // returns an error if it does NOT have the required sector file/dir.
 func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Request) {
+	log.Info("----remoteGetSector")
 	vars := mux.Vars(r)
 
 	id, err := storiface.ParseSectorID(vars["id"])
@@ -115,6 +116,27 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 	si := storiface.SectorRef{
 		ID:        id,
 		ProofType: 0,
+	}
+	if ft == storiface.FTUnsealed {
+		txCarInfo, err := txcar.IsAndGetTxCarInfo(context.Background(), handler.DB, id)
+		if err == nil {
+			// is tx car
+			log.Infow("----remoteGetSector.isTxCar", "si", si, "txCarInfo", txCarInfo)
+
+			unsealedFilePath, err := txcar.NewTxCarUnsealedFile(txCarInfo, si)
+			if err != nil {
+				log.Errorf("txcar.NewTxCarUnsealedFile: %x", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			// will do a ranged read over the file at the given path if the caller has asked for a ranged read in the request headers.
+			http.ServeFile(w, r, unsealedFilePath)
+			return
+		} else {
+			// is regular, continue
+			log.Infow("----remoteGetSector.isNotTxCar", "si", si, "err", err)
+		}
 	}
 
 	paths, _, err := handler.Local.AcquireSector(r.Context(), si, ft, storiface.FTNone, storiface.PathStorage, storiface.AcquireMove)
