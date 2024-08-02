@@ -123,7 +123,7 @@ DO UPDATE SET
 func IsAndGetTxCarInfo(ctx context.Context, db *harmonydb.DB, sectorId abi.SectorID) (TxCarInfo, error) {
 	var nilTxCarInfo TxCarInfo
 	var rows []TxCarInfo
-	err := db.Select(ctx, &rows, `select smp.piece_cid,smp.car_key,smp.piece_size,smp.car_size  
+	err := db.Select(ctx, &rows, `select tcp.piece_cid,tcp.car_key,tcp.piece_size,tcp.car_size  
 from sectors_meta_pieces smp 
     join tx_car_pieces tcp on smp.piece_cid=tcp.piece_cid 
 where smp.sp_id=$1 and smp.sector_num=$2;`, sectorId.Miner, sectorId.Number)
