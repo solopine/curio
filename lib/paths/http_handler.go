@@ -122,10 +122,10 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 		txCarInfo, err := txcar.IsAndGetTxCarInfo(ctx, handler.DB, id)
 		if err == nil {
 			// is tx car
-			log.Infow("----remoteGetSector.TxCar.begin", "si", si, "txCarInfo", txCarInfo)
+			log.Infow("----remoteGetSector.TxCar.begin", "si", si, "txCarInfo", txCarInfo, "r.URL", r.URL)
 
 			serveDone := make(chan struct{}, 1)
-			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(ctx, txCarInfo, serveDone)
+			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(txCarInfo, serveDone)
 			if err != nil {
 				log.Errorf("txcar.NewTxCarUnsealedFile: %x", err)
 				w.WriteHeader(500)

@@ -141,7 +141,8 @@ func (op *serveOperation) stopServe() {
 	op.cancel()
 }
 
-func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
+func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
+	ctx := context.Background()
 	reqId := uuid.New()
 	log.Infow("----GetTxCarUnsealedCache.start1", "reqId", reqId, "txCarInfo", txCarInfo)
 
@@ -170,7 +171,7 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 		}
 	}
 
-	log.Infow("----GetTxCarUnsealedCache. NOT in cache", "pieceCid", op.txCarInfo.PieceCid)
+	log.Infow("----GetTxCarUnsealedCache. NOT in cache", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 
 	// wait and start new serve
 	// wait or swap other serve thread

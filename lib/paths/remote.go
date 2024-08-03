@@ -625,7 +625,7 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 		}
 
 		serveDone := make(chan struct{}, 1)
-		unsealedFilePath, err := txcar.GetTxCarUnsealedCache(ctx, txCarInfo, serveDone)
+		unsealedFilePath, err := txcar.GetTxCarUnsealedCache(txCarInfo, serveDone)
 		if err != nil {
 			return nil, xerrors.Errorf("txcar.NewTxCarUnsealedFile: %w", err)
 		}
