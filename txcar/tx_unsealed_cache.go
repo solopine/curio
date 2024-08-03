@@ -52,10 +52,15 @@ func newServeOperation(txCarInfo *TxCarInfo, reqId uuid.UUID, filePathCh chan st
 
 // return filePath chan
 func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (chan string, error) {
+	log.Infow("----TxCar.addRequest.beforeLock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	op.rwLock.Lock()
+	log.Infow("----TxCar.addRequest.afterLock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	defer func() {
+		log.Infow("----TxCar.addRequest.beforeUnlock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 		op.rwLock.Unlock()
+		log.Infow("----TxCar.addRequest.afterUnlock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 		op.wakeFromIdle <- struct{}{}
+		log.Infow("----TxCar.addRequest.afterUnlock2", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	}()
 	_, exist := op.serveDoneMap[reqId]
 	if exist {
@@ -67,14 +72,18 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 	ch := make(chan string, 1)
 
 	if op.isFileCreated {
+		log.Infow("----TxCar.addRequest.op.isFileCreated", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 		ch <- op.filePath
+		log.Infow("----TxCar.addRequest.op.isFileCreated2", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	} else {
+		log.Infow("----TxCar.addRequest.op.isFileCreated.not", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 		_, exist = op.createDoneMap[reqId]
 		if exist {
 			return nil, xerrors.Errorf("createDoneMap.reqId exist. reqId:%x, txCarInfo:%x", reqId, op.txCarInfo)
 		}
 		op.createDoneMap[reqId] = ch
 	}
+	log.Infow("----TxCar.addRequest.op.done", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	return ch, nil
 }
 
@@ -179,7 +188,7 @@ func GetTxCarUnsealedCache(reqId uuid.UUID, txCarInfo TxCarInfo, serveDone chan 
 	pieceCidToServeMapLock.Lock()
 	if op, ok := pieceCidToServeMap[txCarInfo.PieceCid]; ok {
 		// already exist
-		log.Infow("----GetTxCarUnsealedCache. in cache", "pieceCid", op.txCarInfo.PieceCid)
+		log.Infow("----GetTxCarUnsealedCache. in cache", "reqId", reqId, "pieceCid", txCarInfo.PieceCid)
 
 		// add request to op serve list
 		filePathCh, err := op.addRequest(reqId, serveDone)

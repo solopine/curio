@@ -135,6 +135,7 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			// will do a ranged read over the file at the given path if the caller has asked for a ranged read in the request headers.
+			log.Infow("----remoteGetSector.TxCar.before.serve", "reqId", reqId, "si", si, "txCarInfo", txCarInfo)
 			http.ServeFile(w, r, unsealedFilePath)
 			serveDone <- struct{}{}
 			log.Infow("----remoteGetSector.TxCar.complete", "reqId", reqId, "si", si, "txCarInfo", txCarInfo)
