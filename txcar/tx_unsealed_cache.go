@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	maxCacheSize        = 2
-	serveTimeOutSeconds = 600
+	maxCacheSize               = 2
+	serveTimeOutSeconds        = 600
+	safeTimeoutToDeleteSeconds = 60
 )
 
 var pieceCidToServeMapLock = sync.Mutex{}
@@ -28,9 +29,24 @@ type serveOperation struct {
 	// req wait creating
 	createDoneMap map[uuid.UUID]chan string
 	// reqId -> done chan
-	serveDoneMap map[uuid.UUID]chan struct{}
-	timeout      <-chan time.Time
-	reqArrive    chan struct{}
+	serveDoneMap        map[uuid.UUID]chan struct{}
+	timeout             <-chan time.Time
+	safeTimeoutToDelete <-chan time.Time
+	canBeDeleted        bool
+	wakeFromIdle        chan struct{}
+}
+
+func newServeOperation(txCarInfo TxCarInfo, reqId uuid.UUID, filePathCh chan string, serveDone chan struct{}) serveOperation {
+	return serveOperation{
+		txCarInfo: &txCarInfo,
+		createDoneMap: map[uuid.UUID]chan string{
+			reqId: filePathCh,
+		},
+		serveDoneMap: map[uuid.UUID]chan struct{}{
+			reqId: serveDone,
+		},
+		wakeFromIdle: make(chan struct{}, 1),
+	}
 }
 
 // return filePath chan
@@ -44,8 +60,8 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 		return nil, xerrors.Errorf("serveDoneMap.reqId exist. reqId:%x, txCarInfo:%x", reqId, op.txCarInfo)
 	}
 	op.serveDoneMap[reqId] = serveDone
-	op.reqArrive = make(chan struct{}, 1)
-	op.reqArrive <- struct{}{}
+	op.wakeFromIdle <- struct{}{}
+	op.canBeDeleted = false
 
 	ch := make(chan string, 1)
 
@@ -66,7 +82,7 @@ func (op *serveOperation) isIdle() bool {
 	defer func() {
 		op.rwLock.RUnlock()
 	}()
-	return len(op.serveDoneMap) == 0
+	return op.canBeDeleted
 }
 
 // return filePath chan
@@ -108,6 +124,8 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 			case <-serveDone:
 				log.Infow("----txcar.startServe done for req", "req", req, "car", op.txCarInfo)
 				op.timeout = time.After(serveTimeOutSeconds * time.Second)
+				op.safeTimeoutToDelete = time.After(safeTimeoutToDeleteSeconds * time.Second)
+				op.wakeFromIdle <- struct{}{}
 				delete(op.serveDoneMap, req)
 			default:
 				//No value ready, moving on.
@@ -124,12 +142,17 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 			case <-ctx.Done():
 				log.Infow("----txcar.startServe canceled, now clean", "car", op.txCarInfo)
 				return ctx.Err()
-			case <-op.timeout:
-				// timeout need clean
-				log.Infow("----txcar.startServe timeout, now clean", "car", op.txCarInfo)
-				return nil
-			case <-op.reqArrive:
-				// new req arrived
+			case _, ok := <-op.timeout:
+				if ok {
+					// timeout need clean
+					log.Infow("----txcar.startServe timeout, now clean", "car", op.txCarInfo)
+					return nil
+				}
+				// op.timeout just closed and replace by another one
+			case <-op.safeTimeoutToDelete:
+				op.canBeDeleted = true
+			case <-op.wakeFromIdle:
+				// something changed, need check again
 			}
 		} else {
 			// still in serve
@@ -197,16 +220,8 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 		if canServe {
 			//new
 			filePathCh := make(chan string, 1)
-			op := &serveOperation{
-				txCarInfo: &txCarInfo,
-				createDoneMap: map[uuid.UUID]chan string{
-					reqId: filePathCh,
-				},
-				serveDoneMap: map[uuid.UUID]chan struct{}{
-					reqId: serveDone,
-				},
-			}
-			pieceCidToServeMap[txCarInfo.PieceCid] = op
+			op := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
+			pieceCidToServeMap[txCarInfo.PieceCid] = &op
 			pieceCidToServeMapLock.Unlock()
 
 			log.Infow("----GetTxCarUnsealedCache.startServe", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
