@@ -59,8 +59,13 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 		log.Infow("----TxCar.addRequest.beforeUnlock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 		op.rwLock.Unlock()
 		log.Infow("----TxCar.addRequest.afterUnlock", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
-		op.wakeFromIdle <- struct{}{}
-		log.Infow("----TxCar.addRequest.afterUnlock2", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
+		select {
+		case op.wakeFromIdle <- struct{}{}:
+			log.Infow("----TxCar.addRequest.afterUnlock.send.wakeFromIdle", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
+		default:
+			log.Infow("----TxCar.addRequest.afterUnlock.NOT.send.wakeFromIdle", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
+		}
+		log.Infow("----TxCar.addRequest.afterUnlock3", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 	}()
 	_, exist := op.serveDoneMap[reqId]
 	if exist {
