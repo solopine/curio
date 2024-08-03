@@ -124,7 +124,7 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 		if err == nil {
 			reqId := uuid.New()
 			// is tx car
-			log.Infow("----remoteGetSector.TxCar.begin", "reqId", reqId, "si", si, "txCarInfo", txCarInfo, "r.URL", r.URL)
+			log.Infow("----remoteGetSector.TxCar.begin", "reqId", reqId, "si", si, "txCarInfo", txCarInfo, "r.URL", r.URL, "r.Header", r.Header)
 
 			serveDone := make(chan struct{}, 1)
 			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(reqId, txCarInfo, serveDone)
