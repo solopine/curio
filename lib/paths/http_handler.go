@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/filecoin-project/curio/harmony/harmonydb"
 	"github.com/filecoin-project/curio/txcar"
+	"github.com/google/uuid"
 	"io"
 	"net/http"
 	"os"
@@ -121,11 +122,12 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 		ctx := context.Background()
 		txCarInfo, err := txcar.IsAndGetTxCarInfo(ctx, handler.DB, id)
 		if err == nil {
+			reqId := uuid.New()
 			// is tx car
-			log.Infow("----remoteGetSector.TxCar.begin", "si", si, "txCarInfo", txCarInfo, "r.URL", r.URL)
+			log.Infow("----remoteGetSector.TxCar.begin", "reqId", reqId, "si", si, "txCarInfo", txCarInfo, "r.URL", r.URL)
 
 			serveDone := make(chan struct{}, 1)
-			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(txCarInfo, serveDone)
+			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(reqId, txCarInfo, serveDone)
 			if err != nil {
 				log.Errorf("txcar.NewTxCarUnsealedFile: %x", err)
 				w.WriteHeader(500)
@@ -135,7 +137,7 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 			// will do a ranged read over the file at the given path if the caller has asked for a ranged read in the request headers.
 			http.ServeFile(w, r, unsealedFilePath)
 			serveDone <- struct{}{}
-			log.Infow("----remoteGetSector.TxCar.complete", "si", si, "txCarInfo", txCarInfo)
+			log.Infow("----remoteGetSector.TxCar.complete", "reqId", reqId, "si", si, "txCarInfo", txCarInfo)
 			return
 		} else {
 			// is regular, continue

@@ -172,9 +172,8 @@ func (op *serveOperation) stopServe() {
 	op.cancel()
 }
 
-func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
+func GetTxCarUnsealedCache(reqId uuid.UUID, txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
 	ctx := context.Background()
-	reqId := uuid.New()
 	log.Infow("----GetTxCarUnsealedCache.start", "reqId", reqId, "txCarInfo", txCarInfo)
 
 	pieceCidToServeMapLock.Lock()

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/filecoin-project/curio/harmony/harmonydb"
 	"github.com/filecoin-project/curio/txcar"
+	"github.com/google/uuid"
 	"io"
 	"math/bits"
 	"net/http"
@@ -616,8 +617,9 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 
 	txCarInfo, err := txcar.IsAndGetTxCarInfo(ctx, r.harmonyDB, s.ID)
 	if err == nil {
+		reqId := uuid.New()
 		// is tx car
-		log.Infow("Reader.isTxCar", "s", s, "txCarInfo", txCarInfo)
+		log.Infow("Reader.isTxCar", "reqId", reqId, "s", s, "txCarInfo", txCarInfo)
 
 		ssize, err := s.ProofType.SectorSize()
 		if err != nil {
@@ -625,7 +627,7 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 		}
 
 		serveDone := make(chan struct{}, 1)
-		unsealedFilePath, err := txcar.GetTxCarUnsealedCache(txCarInfo, serveDone)
+		unsealedFilePath, err := txcar.GetTxCarUnsealedCache(reqId, txCarInfo, serveDone)
 		if err != nil {
 			return nil, xerrors.Errorf("txcar.NewTxCarUnsealedFile: %w", err)
 		}
@@ -636,10 +638,10 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 		log.Debugf("txcar.local partial file opened %s (+%d,%d)", unsealedFilePath, offset, size)
 
 		done := func() error {
-			log.Infow("txcar.closing partial file", "path", unsealedFilePath)
+			log.Infow("txcar.closing partial file", "reqId", reqId, "path", unsealedFilePath)
 			err := pf.Close()
 			if err != nil {
-				log.Errorw("txcar.closing idle partial file", "path", unsealedFilePath, "error", err)
+				log.Errorw("txcar.closing idle partial file", "reqId", reqId, "path", unsealedFilePath, "error", err)
 				return err
 			}
 			serveDone <- struct{}{}
