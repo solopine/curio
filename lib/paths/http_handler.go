@@ -118,12 +118,14 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 		ProofType: 0,
 	}
 	if ft == storiface.FTUnsealed {
-		txCarInfo, err := txcar.IsAndGetTxCarInfo(context.Background(), handler.DB, id)
+		ctx := context.Background()
+		txCarInfo, err := txcar.IsAndGetTxCarInfo(ctx, handler.DB, id)
 		if err == nil {
 			// is tx car
-			log.Infow("----remoteGetSector.isTxCar", "si", si, "txCarInfo", txCarInfo)
+			log.Infow("----remoteGetSector.TxCar.begin", "si", si, "txCarInfo", txCarInfo)
 
-			unsealedFilePath, err := txcar.NewTxCarUnsealedFile(txCarInfo, si)
+			serveDone := make(chan struct{}, 1)
+			unsealedFilePath, err := txcar.GetTxCarUnsealedCache(ctx, txCarInfo, serveDone)
 			if err != nil {
 				log.Errorf("txcar.NewTxCarUnsealedFile: %x", err)
 				w.WriteHeader(500)
@@ -132,6 +134,8 @@ func (handler *FetchHandler) remoteGetSector(w http.ResponseWriter, r *http.Requ
 			w.Header().Set("Content-Type", "application/octet-stream")
 			// will do a ranged read over the file at the given path if the caller has asked for a ranged read in the request headers.
 			http.ServeFile(w, r, unsealedFilePath)
+			serveDone <- struct{}{}
+			log.Infow("----remoteGetSector.TxCar.complete", "si", si, "txCarInfo", txCarInfo)
 			return
 		} else {
 			// is regular, continue

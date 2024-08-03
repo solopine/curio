@@ -13,13 +13,14 @@ import (
 )
 
 // (unsealedFilePath, error)
-func NewTxCarUnsealedFile(txCarInfo TxCarInfo, s storiface.SectorRef) (string, error) {
+func NewTxCarUnsealedFile(txCarInfo TxCarInfo) (string, error) {
 	destDir := "/cartmp"
 	_, err := os.Stat(destDir)
 	if err != nil {
 		destDir = os.TempDir()
 	}
-	unsealedFileName := "tx-" + s.ID.Miner.String() + "-" + s.ID.Number.String()
+
+	unsealedFileName := txCarInfo.PieceCid.String()
 	unsealedFilePath := path.Join(destDir, unsealedFileName)
 
 	carReader, err := NewTxCarReader(txCarInfo)
