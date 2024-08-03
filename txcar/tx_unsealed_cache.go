@@ -220,8 +220,9 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 		if canServe {
 			//new
 			filePathCh := make(chan string, 1)
-			op := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
-			pieceCidToServeMap[txCarInfo.PieceCid] = &op
+			opi := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
+			op := &opi
+			pieceCidToServeMap[txCarInfo.PieceCid] = op
 			pieceCidToServeMapLock.Unlock()
 
 			log.Infow("----GetTxCarUnsealedCache.startServe", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
@@ -230,7 +231,8 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 			go func() {
 				err := op.startServe(ctx)
 				if err != nil {
-
+					log.Errorf("----GetTxCarUnsealedCache.startServe.exit with err:%v", err)
+					errCh <- err
 				}
 			}()
 
