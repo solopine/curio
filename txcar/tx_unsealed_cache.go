@@ -36,8 +36,8 @@ type serveOperation struct {
 	wakeFromIdle        chan struct{}
 }
 
-func newServeOperation(txCarInfo TxCarInfo, reqId uuid.UUID, filePathCh chan string, serveDone chan struct{}) serveOperation {
-	return serveOperation{
+func newServeOperation(txCarInfo TxCarInfo, reqId uuid.UUID, filePathCh chan string, serveDone chan struct{}) *serveOperation {
+	return &serveOperation{
 		txCarInfo: &txCarInfo,
 		createDoneMap: map[uuid.UUID]chan string{
 			reqId: filePathCh,
@@ -220,8 +220,7 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 		if canServe {
 			//new
 			filePathCh := make(chan string, 1)
-			opi := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
-			op := &opi
+			op := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
 			pieceCidToServeMap[txCarInfo.PieceCid] = op
 			pieceCidToServeMapLock.Unlock()
 
