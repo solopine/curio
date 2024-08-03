@@ -143,9 +143,10 @@ func (op *serveOperation) stopServe() {
 
 func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
 	reqId := uuid.New()
-	log.Infow("----GetTxCarUnsealedCache.start", "reqId", reqId, "txCarInfo", txCarInfo)
+	log.Infow("----GetTxCarUnsealedCache.start1", "reqId", reqId, "txCarInfo", txCarInfo)
 
 	pieceCidToServeMapLock.Lock()
+	log.Infow("----GetTxCarUnsealedCache.start1.locked", "reqId", reqId, "txCarInfo", txCarInfo)
 	op, ok := pieceCidToServeMap[txCarInfo.PieceCid]
 	if ok {
 		// already exist
