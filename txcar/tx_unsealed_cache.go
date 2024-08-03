@@ -89,6 +89,7 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 	ctx := op.ctx
 
 	defer func() {
+		log.Infow("----txcar.startServe finished, now remove file", "car", op.txCarInfo)
 		err := os.Remove(op.filePath)
 		if err != nil {
 			log.Errorw("----txcar.startServe remove file fail", "car", op.txCarInfo)
