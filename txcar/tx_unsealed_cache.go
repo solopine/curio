@@ -15,7 +15,7 @@ const (
 	serveTimeOutSeconds = 600
 )
 
-var pieceCidToServeMapLock sync.Mutex
+var pieceCidToServeMapLock = sync.Mutex{}
 var pieceCidToServeMap = map[cid.Cid]*serveOperation{}
 
 type serveOperation struct {
