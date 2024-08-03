@@ -36,9 +36,10 @@ type serveOperation struct {
 	wakeFromIdle        chan struct{}
 }
 
-func newServeOperation(txCarInfo TxCarInfo, reqId uuid.UUID, filePathCh chan string, serveDone chan struct{}) *serveOperation {
+func newServeOperation(txCarInfo *TxCarInfo, reqId uuid.UUID, filePathCh chan string, serveDone chan struct{}) *serveOperation {
 	return &serveOperation{
-		txCarInfo: &txCarInfo,
+		rwLock:    sync.RWMutex{},
+		txCarInfo: txCarInfo,
 		createDoneMap: map[uuid.UUID]chan string{
 			reqId: filePathCh,
 		},
@@ -97,11 +98,11 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 	op.ctx, op.cancel = context.WithCancel(parentCtx)
 	op.filePath = file
 	op.isFileCreated = true
-	op.rwLock.Unlock()
 	for req, createDone := range op.createDoneMap {
 		createDone <- file
 		delete(op.createDoneMap, req)
 	}
+	op.rwLock.Unlock()
 	ctx := op.ctx
 
 	defer func() {
@@ -115,7 +116,7 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 	// serve
 	for {
 		op.rwLock.Lock()
-
+		log.Infow("----txcar.startServe.serveDoneMap", "car", op.txCarInfo)
 		for req, serveDone := range op.serveDoneMap {
 			select {
 			case <-ctx.Done():
@@ -159,8 +160,10 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 			log.Infow("----txcar.startServe still in serve", "inServeCount", inServeCount, "car", op.txCarInfo)
 			select {
 			case <-ctx.Done():
+				log.Infow("----txcar.startServe.ctx.Done", "car", op.txCarInfo)
 				return ctx.Err()
 			case <-time.After(10 * time.Second):
+				log.Infow("----txcar.startServe.waited 10s", "car", op.txCarInfo)
 			}
 		}
 	}
@@ -220,7 +223,7 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 		if canServe {
 			//new
 			filePathCh := make(chan string, 1)
-			op := newServeOperation(txCarInfo, reqId, filePathCh, serveDone)
+			op := newServeOperation(&txCarInfo, reqId, filePathCh, serveDone)
 			pieceCidToServeMap[txCarInfo.PieceCid] = op
 			pieceCidToServeMapLock.Unlock()
 
