@@ -144,13 +144,10 @@ func (op *serveOperation) stopServe() {
 func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
 	ctx := context.Background()
 	reqId := uuid.New()
-	log.Infow("----GetTxCarUnsealedCache.start1", "reqId", reqId, "txCarInfo", txCarInfo)
+	log.Infow("----GetTxCarUnsealedCache.start", "reqId", reqId, "txCarInfo", txCarInfo)
 
 	pieceCidToServeMapLock.Lock()
-	log.Infow("----GetTxCarUnsealedCache.start1.locked", "reqId", reqId, "txCarInfo", txCarInfo)
-	op, ok := pieceCidToServeMap[txCarInfo.PieceCid]
-	log.Infow("----GetTxCarUnsealedCache.start2", "reqId", reqId, "txCarInfo", txCarInfo, "ok", ok)
-	if ok {
+	if op, ok := pieceCidToServeMap[txCarInfo.PieceCid]; ok {
 		// already exist
 		log.Infow("----GetTxCarUnsealedCache. in cache", "pieceCid", op.txCarInfo.PieceCid)
 
@@ -171,7 +168,7 @@ func GetTxCarUnsealedCache(txCarInfo TxCarInfo, serveDone chan struct{}) (string
 		}
 	}
 
-	log.Infow("----GetTxCarUnsealedCache. NOT in cache", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
+	log.Infow("----GetTxCarUnsealedCache. NOT in cache", "reqId", reqId, "pieceCid", txCarInfo.PieceCid)
 
 	// wait and start new serve
 	// wait or swap other serve thread
