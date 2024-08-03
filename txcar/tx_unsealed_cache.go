@@ -55,13 +55,13 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 	op.rwLock.Lock()
 	defer func() {
 		op.rwLock.Unlock()
+		op.wakeFromIdle <- struct{}{}
 	}()
 	_, exist := op.serveDoneMap[reqId]
 	if exist {
 		return nil, xerrors.Errorf("serveDoneMap.reqId exist. reqId:%x, txCarInfo:%x", reqId, op.txCarInfo)
 	}
 	op.serveDoneMap[reqId] = serveDone
-	op.wakeFromIdle <- struct{}{}
 	op.canBeDeleted = false
 
 	ch := make(chan string, 1)
@@ -79,10 +79,6 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 }
 
 func (op *serveOperation) isIdle() bool {
-	op.rwLock.RLock()
-	defer func() {
-		op.rwLock.RUnlock()
-	}()
 	return op.canBeDeleted
 }
 
@@ -126,8 +122,11 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 				log.Infow("----txcar.startServe done for req", "req", req, "car", op.txCarInfo)
 				op.timeout = time.After(serveTimeOutSeconds * time.Second)
 				op.safeTimeoutToDelete = time.After(safeTimeoutToDeleteSeconds * time.Second)
-				op.wakeFromIdle <- struct{}{}
 				delete(op.serveDoneMap, req)
+				select {
+				case op.wakeFromIdle <- struct{}{}:
+				default:
+				}
 			default:
 				//No value ready, moving on.
 			}
