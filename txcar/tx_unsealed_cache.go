@@ -148,6 +148,7 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 	pieceCidToServeMapLock.Lock()
 	log.Infow("----GetTxCarUnsealedCache.start1.locked", "reqId", reqId, "txCarInfo", txCarInfo)
 	op, ok := pieceCidToServeMap[txCarInfo.PieceCid]
+	log.Infow("----GetTxCarUnsealedCache.start2", "reqId", reqId, "txCarInfo", txCarInfo, "ok", ok)
 	if ok {
 		// already exist
 		log.Infow("----GetTxCarUnsealedCache. in cache", "pieceCid", op.txCarInfo.PieceCid)
