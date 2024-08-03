@@ -19,6 +19,8 @@ var pieceCidToServeMapLock sync.Mutex
 var pieceCidToServeMap = map[cid.Cid]*serveOperation{}
 
 type serveOperation struct {
+	ctx           context.Context
+	cancel        context.CancelFunc
 	rwLock        sync.RWMutex
 	txCarInfo     *TxCarInfo
 	filePath      string
@@ -65,13 +67,15 @@ func (op *serveOperation) isIdle() bool {
 }
 
 // return filePath chan
-func (op *serveOperation) startServe(ctx context.Context) error {
+func (op *serveOperation) startServe(parentCtx context.Context) error {
 	file, err := NewTxCarUnsealedFile(*op.txCarInfo)
 	if err != nil {
 		return nil
 	}
+	log.Infow("----GetTxCarUnsealedCache.startServe file created", "pieceCid", op.txCarInfo.PieceCid)
 
 	op.rwLock.Lock()
+	op.ctx, op.cancel = context.WithCancel(parentCtx)
 	op.filePath = file
 	op.isFileCreated = true
 	op.rwLock.Unlock()
@@ -79,6 +83,14 @@ func (op *serveOperation) startServe(ctx context.Context) error {
 		createDone <- file
 		delete(op.createDoneMap, req)
 	}
+	ctx := op.ctx
+
+	defer func() {
+		err := os.Remove(op.filePath)
+		if err != nil {
+			log.Errorw("----txcar.startServe remove file fail", "car", op.txCarInfo)
+		}
+	}()
 
 	// serve
 	for {
@@ -98,25 +110,24 @@ func (op *serveOperation) startServe(ctx context.Context) error {
 			}
 		}
 
-		isIdle := len(op.serveDoneMap) == 0
+		inServeCount := len(op.serveDoneMap)
 		op.rwLock.Unlock()
 
-		if isIdle {
+		if inServeCount == 0 {
 			// none in serve, so idle
+			log.Infow("----txcar.startServe in idle", "car", op.txCarInfo)
 			select {
 			case <-ctx.Done():
+				log.Infow("----txcar.startServe canceled, now clean", "car", op.txCarInfo)
 				return ctx.Err()
 			case <-op.timeout:
 				// timeout need clean
 				log.Infow("----txcar.startServe timeout, now clean", "car", op.txCarInfo)
-				err := os.Remove(op.filePath)
-				if err != nil {
-					return err
-				}
 				return nil
 			}
 		} else {
 			// still in serve
+			log.Infow("----txcar.startServe still in serve", "inServeCount", inServeCount, "car", op.txCarInfo)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -124,6 +135,10 @@ func (op *serveOperation) startServe(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (op *serveOperation) stopServe() {
+	op.cancel()
 }
 
 func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone chan struct{}) (string, error) {
@@ -134,7 +149,7 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 	op, ok := pieceCidToServeMap[txCarInfo.PieceCid]
 	if ok {
 		// already exist
-		log.Debugw("unsealed serve: operation in progress, waiting for completion", "pieceCid", op.txCarInfo.PieceCid)
+		log.Infow("----GetTxCarUnsealedCache. in cache", "pieceCid", op.txCarInfo.PieceCid)
 
 		// add request to op serve list
 		filePathCh, err := op.addRequest(reqId, serveDone)
@@ -153,6 +168,8 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 		}
 	}
 
+	log.Infow("----GetTxCarUnsealedCache. NOT in cache", "pieceCid", op.txCarInfo.PieceCid)
+
 	// wait and start new serve
 	// wait or swap other serve thread
 	for {
@@ -164,6 +181,7 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 				if op.isIdle() {
 					log.Warnw("----delete idle tx car unsealed cache", "pieceCid", pieceCid)
 					// delete
+					op.stopServe()
 					delete(pieceCidToServeMap, pieceCid)
 					canServe = true
 					break
@@ -184,6 +202,8 @@ func GetTxCarUnsealedCache(ctx context.Context, txCarInfo TxCarInfo, serveDone c
 			}
 			pieceCidToServeMap[txCarInfo.PieceCid] = op
 			pieceCidToServeMapLock.Unlock()
+
+			log.Infow("----GetTxCarUnsealedCache.startServe", "reqId", reqId, "pieceCid", op.txCarInfo.PieceCid)
 
 			errCh := make(chan error)
 			go func() {
