@@ -409,6 +409,7 @@ func TestRemoteGetSector(t *testing.T) {
 			handler := &paths.FetchHandler{
 				lstore,
 				pfhandler,
+				nil,
 			}
 
 			// run http server

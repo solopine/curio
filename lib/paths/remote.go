@@ -624,7 +624,8 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 			return nil, err
 		}
 
-		unsealedFilePath, err := txcar.NewTxCarUnsealedFile(txCarInfo, s)
+		serveDone := make(chan struct{}, 1)
+		unsealedFilePath, err := txcar.GetTxCarUnsealedCache(ctx, txCarInfo, serveDone)
 		if err != nil {
 			return nil, xerrors.Errorf("txcar.NewTxCarUnsealedFile: %w", err)
 		}
@@ -641,11 +642,7 @@ func (r *Remote) Reader(ctx context.Context, s storiface.SectorRef, offset, size
 				log.Errorw("txcar.closing idle partial file", "path", unsealedFilePath, "error", err)
 				return err
 			}
-			err = os.Remove(unsealedFilePath)
-			if err != nil {
-				log.Errorw("txcar.remove partial file", "path", unsealedFilePath, "error", err)
-				return err
-			}
+			serveDone <- struct{}{}
 			return nil
 		}
 
