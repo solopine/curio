@@ -30,6 +30,7 @@ type serveOperation struct {
 	// reqId -> done chan
 	serveDoneMap map[uuid.UUID]chan struct{}
 	timeout      <-chan time.Time
+	reqArrive    chan struct{}
 }
 
 // return filePath chan
@@ -43,6 +44,8 @@ func (op *serveOperation) addRequest(reqId uuid.UUID, serveDone chan struct{}) (
 		return nil, xerrors.Errorf("serveDoneMap.reqId exist. reqId:%x, txCarInfo:%x", reqId, op.txCarInfo)
 	}
 	op.serveDoneMap[reqId] = serveDone
+	op.reqArrive = make(chan struct{}, 1)
+	op.reqArrive <- struct{}{}
 
 	ch := make(chan string, 1)
 
@@ -124,6 +127,8 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 				// timeout need clean
 				log.Infow("----txcar.startServe timeout, now clean", "car", op.txCarInfo)
 				return nil
+			case <-op.reqArrive:
+				// new req arrived
 			}
 		} else {
 			// still in serve
@@ -131,7 +136,7 @@ func (op *serveOperation) startServe(parentCtx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(1 * time.Second):
+			case <-time.After(10 * time.Second):
 			}
 		}
 	}
