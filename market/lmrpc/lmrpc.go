@@ -268,10 +268,15 @@ func ServeCurioMarketRPC(db *harmonydb.DB, full api.Chain, maddr address.Address
 
 		start := time.Now()
 
-		pieceData := io.LimitReader(io.MultiReader(
-			pi.data,
-			nullreader.Reader{},
-		), int64(pi.size))
+		var pieceData io.Reader
+		if pi.isTxCar {
+			pieceData = pi.data
+		} else {
+			pieceData = io.LimitReader(io.MultiReader(
+				pi.data,
+				nullreader.Reader{},
+			), int64(pi.size))
+		}
 
 		n, err := io.Copy(w, pieceData)
 		close(pi.done)
@@ -312,7 +317,8 @@ type pieceInfo struct {
 	data storiface.Data
 	size abi.UnpaddedPieceSize
 
-	done chan struct{}
+	done    chan struct{}
+	isTxCar bool
 }
 
 type PieceIngester interface {
@@ -361,7 +367,8 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 			data: pieceData,
 			size: pieceSize,
 
-			done: make(chan struct{}),
+			done:    make(chan struct{}),
+			isTxCar: isTxCar,
 		}
 
 		pieceUUID := uuid.New()

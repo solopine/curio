@@ -143,7 +143,7 @@ func getResources() (res Resources, err error) {
 
 	res = Resources{
 		Cpu: runtime.NumCPU(),
-		Ram: mem.Available,
+		Ram: mem.Total - 64*1024*1024*1024, //64G for buf
 		Gpu: getGPUDevices(),
 	}
 
