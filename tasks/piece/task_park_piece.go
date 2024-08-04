@@ -161,6 +161,7 @@ func (p *ParkPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (d
 	if err != nil {
 		return false, xerrors.Errorf("IsTxCarPieceStr: %w", err)
 	}
+	log.Infow("ParkPieceTask", "isTxCar", isTxCar, "piece_cid", pieceData.PieceCID, "refData", refData)
 
 	var merr error
 
