@@ -247,6 +247,7 @@ func ServeCurioMarketRPC(db *harmonydb.DB, full api.Chain, maddr address.Address
 		fmt.Printf("%s request for piece from %s\n", pieceUUID, r.RemoteAddr)
 
 		pieceInfoLk.Lock()
+		log.Infow("----check.pieceInfos", "pu", pu, "len(pieceInfos)", len(pieceInfos))
 		pis, ok := pieceInfos[pu]
 		if !ok {
 			http.Error(w, "piece not found", http.StatusNotFound)
