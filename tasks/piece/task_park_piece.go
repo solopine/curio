@@ -3,6 +3,8 @@ package piece
 import (
 	"context"
 	"encoding/json"
+	"github.com/filecoin-project/curio/txcar"
+	"io"
 	"strconv"
 	"time"
 
@@ -155,6 +157,11 @@ func (p *ParkPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (d
 		return false, xerrors.Errorf("parsing piece raw size: %w", err)
 	}
 
+	isTxCar, err := txcar.IsTxCarPieceStr(ctx, p.db, pieceData.PieceCID)
+	if err != nil {
+		return false, xerrors.Errorf("IsTxCarPieceStr: %w", err)
+	}
+
 	var merr error
 
 	for i := range refData {
@@ -164,11 +171,18 @@ func (p *ParkPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (d
 				_ = upr.Close()
 			}()
 
-			pnum := storiface.PieceNumber(pieceData.PieceID)
+			if isTxCar {
+				if _, err := io.Copy(io.Discard, upr); err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("io.Copy: %w", err))
+					continue
+				}
+			} else {
+				pnum := storiface.PieceNumber(pieceData.PieceID)
 
-			if err := p.sc.WritePiece(ctx, &taskID, pnum, pieceRawSize, upr); err != nil {
-				merr = multierror.Append(merr, xerrors.Errorf("write piece: %w", err))
-				continue
+				if err := p.sc.WritePiece(ctx, &taskID, pnum, pieceRawSize, upr); err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("write piece: %w", err))
+					continue
+				}
 			}
 
 			// Update the piece as complete after a successful write.
