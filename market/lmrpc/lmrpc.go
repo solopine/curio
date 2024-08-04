@@ -380,6 +380,7 @@ func sectorAddPieceToAnyOperation(maddr address.Address, rootUrl url.URL, conf *
 		pieceInfoLk.Lock()
 		pieceInfos[pieceUUID] = append(pieceInfos[pieceUUID], pi)
 		pieceInfoLk.Unlock()
+		log.Infow("----pieceInfos.add", "pieceUUID", pieceUUID, "pi.isTxCar", pi.isTxCar)
 
 		// /piece?piece_cid=xxxx
 		dataUrl := rootUrl
