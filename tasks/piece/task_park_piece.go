@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/filecoin-project/curio/txcar"
 	"io"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -167,17 +168,22 @@ func (p *ParkPieceTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (d
 
 	for i := range refData {
 		if refData[i].DataURL != "" {
-			upr := dealdata.NewUrlReader(refData[i].DataURL, pieceRawSize)
-			defer func() {
-				_ = upr.Close()
-			}()
-
 			if isTxCar {
-				if _, err := io.Copy(io.Discard, upr); err != nil {
+				resp, err := http.Get(refData[i].DataURL)
+				if err != nil {
+					merr = multierror.Append(merr, xerrors.Errorf("http.Get: %w", err))
+					continue
+				}
+
+				if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 					merr = multierror.Append(merr, xerrors.Errorf("io.Copy: %w", err))
 					continue
 				}
 			} else {
+				upr := dealdata.NewUrlReader(refData[i].DataURL, pieceRawSize)
+				defer func() {
+					_ = upr.Close()
+				}()
 				pnum := storiface.PieceNumber(pieceData.PieceID)
 
 				if err := p.sc.WritePiece(ctx, &taskID, pnum, pieceRawSize, upr); err != nil {
