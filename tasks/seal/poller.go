@@ -151,6 +151,9 @@ func (s *SealPoller) poll(ctx context.Context) error {
 
 	for _, task := range tasks {
 		task := task
+
+		log.Infow("----seal.poller", "task", task)
+
 		if task.Failed {
 			continue
 		}
