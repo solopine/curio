@@ -14,6 +14,7 @@ import (
 
 // (unsealedFilePath, error)
 func NewTxCarUnsealedFile(txCarInfo TxCarInfo) (string, error) {
+	log.Infow("----NewTxCarUnsealedFile", "txCarInfo", txCarInfo)
 	destDir := "/cartmp"
 	_, err := os.Stat(destDir)
 	if err != nil {

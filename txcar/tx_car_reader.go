@@ -37,8 +37,10 @@ func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
 		destDir = os.TempDir()
 	}
 
+	tmpFile := uuid.New()
+	deskFile := path.Join(destDir, tmpFile.String())
+
 	carKey := txCarInfo.CarKey
-	deskFile := path.Join(destDir, carKey.String()+".car")
 
 	// make a cid with the right length that we eventually will patch with the root.
 	hasher, err := multihash.GetHasher(multihash.SHA2_256)
