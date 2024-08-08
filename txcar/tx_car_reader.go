@@ -29,6 +29,8 @@ var log = logging.Logger("txcar")
 func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
 	var err error
 
+	log.Infow("----NewTxCarReader", "txCarInfo", txCarInfo)
+
 	destDir := "/cartmp"
 	_, err = os.Stat(destDir)
 	if err != nil {
