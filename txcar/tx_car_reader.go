@@ -22,12 +22,25 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	readerTimeoutSeconds = 600
 )
 
 var log = logging.Logger("txcar")
 
-func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
-	var err error
+var carCreateCh = make(chan struct{})
+
+func NewTxCarReader(txCarInfo TxCarInfo) (rc io.ReadCloser, err error) {
+	carCreateCh <- struct{}{}
+	defer func() {
+		if err != nil {
+			<-carCreateCh
+		}
+	}()
 
 	log.Infow("----NewTxCarReader", "txCarInfo", txCarInfo)
 
@@ -98,6 +111,13 @@ func NewTxCarReader(txCarInfo TxCarInfo) (io.ReadCloser, error) {
 		carFile: carFile,
 		carPath: deskFile,
 	}
+	time.AfterFunc(readerTimeoutSeconds*time.Second, func() {
+		log.Warnw("----NewTxCarReader timeout, now close", "txCarInfo", txCarInfo, "deskFile", deskFile)
+		err := readerCloser.Close()
+		if err != nil {
+			log.Errorw("----NewTxCarReader timeout, close fail", "err", err)
+		}
+	})
 
 	return &readerCloser, nil
 }
@@ -106,6 +126,8 @@ type TxCarReader struct {
 	reader  io.Reader
 	carFile *os.File
 	carPath string
+	closed  bool
+	lk      sync.Mutex
 }
 
 func (r *TxCarReader) Read(p []byte) (n int, err error) {
@@ -113,11 +135,30 @@ func (r *TxCarReader) Read(p []byte) (n int, err error) {
 }
 
 func (r *TxCarReader) Close() error {
+	r.lk.Lock()
+	defer func() {
+		r.lk.Unlock()
+	}()
+
+	if r.closed {
+		return nil
+	}
+
+	defer func() {
+		<-carCreateCh
+		r.closed = true
+	}()
+
 	err := r.carFile.Close()
 	if err != nil {
 		return err
 	}
-	return os.Remove(r.carPath)
+	err = os.Remove(r.carPath)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func writeFilesWithMem(ctx context.Context, noWrap bool, bs *blockstore.ReadWrite, key uuid.UUID) (cid.Cid, error) {
