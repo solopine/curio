@@ -32,9 +32,10 @@ const (
 
 var log = logging.Logger("txcar")
 
-var carCreateCh = make(chan struct{})
+var carCreateCh = make(chan struct{}, 1)
 
 func NewTxCarReader(txCarInfo TxCarInfo) (rc io.ReadCloser, err error) {
+	log.Infow("----NewTxCarReader, before lock", "txCarInfo", txCarInfo)
 	carCreateCh <- struct{}{}
 	defer func() {
 		if err != nil {
@@ -42,7 +43,7 @@ func NewTxCarReader(txCarInfo TxCarInfo) (rc io.ReadCloser, err error) {
 		}
 	}()
 
-	log.Infow("----NewTxCarReader", "txCarInfo", txCarInfo)
+	log.Infow("----NewTxCarReader, after lock", "txCarInfo", txCarInfo)
 
 	destDir := "/cartmp"
 	_, err = os.Stat(destDir)
