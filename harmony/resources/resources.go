@@ -79,6 +79,7 @@ func Register(db *harmonydb.DB, hostnameAndPort string) (*Reg, error) {
 		if ownerID == nil {
 			return nil, xerrors.Errorf("no owner id")
 		}
+		logger.Infow("----Register", "ownerID", ownerID, "hostnameAndPort", hostnameAndPort)
 
 		reg.MachineID = *ownerID
 
