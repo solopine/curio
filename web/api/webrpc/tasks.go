@@ -22,6 +22,7 @@ type TaskSummary struct {
 }
 
 func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) {
+	log.Infow("----ClusterTaskSummary.before")
 	var ts = []TaskSummary{}
 	err := a.deps.DB.Select(ctx, &ts, `SELECT 
 		t.id as id, t.name as name, t.update_time as since_posted, t.owner_id as owner_id, hm.host_and_port as owner
@@ -39,7 +40,7 @@ func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) 
 			ts[i].SpID = v.GetSpid(a.deps.DB, ts[i].ID)
 		}
 	}
-
+	log.Infow("----ClusterTaskSummary.after", "ts", len(ts))
 	return ts, nil
 }
 
