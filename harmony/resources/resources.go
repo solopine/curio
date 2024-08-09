@@ -89,7 +89,9 @@ func Register(db *harmonydb.DB, hostnameAndPort string) (*Reg, error) {
 	go func() {
 		for {
 			time.Sleep(time.Minute)
+			logger.Infow("----Register.keeplive", "reg.MachineID", reg.MachineID)
 			if reg.shutdown.Load() {
+				logger.Infow("----Register.keeplive.shutdown")
 				return
 			}
 			_, err := db.Exec(ctx, `UPDATE harmony_machines SET last_contact=CURRENT_TIMESTAMP where id=$1`, reg.MachineID)
