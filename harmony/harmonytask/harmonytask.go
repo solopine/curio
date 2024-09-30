@@ -427,10 +427,10 @@ func (e *TaskEngine) pollerTryAllWork() bool {
 // ResourcesAvailable determines what resources are still unassigned.
 func (e *TaskEngine) ResourcesAvailable() resources.Resources {
 	tmp := e.reg.Resources
-	log.Infow("----ResourcesAvailable", "reg.Resources", tmp)
+	log.Debugw("----ResourcesAvailable", "reg.Resources", tmp)
 	for _, t := range e.handlers {
 		ct := t.Max.ActiveThis()
-		log.Infow("----ResourcesAvailable.1", "t", t.Name, "ct", ct, "t.Cost.Cpu", t.Cost.Cpu, "t.Cost.Gpu", t.Cost.Gpu, "t.Cost.Ram", t.Cost.Ram)
+		log.Debugw("----ResourcesAvailable.1", "t", t.Name, "ct", ct, "t.Cost.Cpu", t.Cost.Cpu, "t.Cost.Gpu", t.Cost.Gpu, "t.Cost.Ram", t.Cost.Ram)
 		tmp.Cpu -= ct * t.Cost.Cpu
 		tmp.Gpu -= float64(ct) * t.Cost.Gpu
 		tmp.Ram -= uint64(ct) * t.Cost.Ram
