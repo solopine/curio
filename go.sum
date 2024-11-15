@@ -1206,8 +1206,8 @@ github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb h1:78YgPq3NbWnO4xyNhL
 github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb/go.mod h1:YnCEHk4UlWROjM3YzC2pbSTq+iynM3ZaLoVDUI8QGpE=
 github.com/solopine/lotus v1.30.0-curio-1 h1:gCMRycyI6bsmv6q4QxZcspk1agl9SctqXIEERDna05Y=
 github.com/solopine/lotus v1.30.0-curio-1/go.mod h1:burmoKFoWZ5M4oLiFWEsfQbVYsbbQc7he9WpxHk/5Bg=
-github.com/solopine/txcar v0.0.32 h1:b1Yl0i9QcxLyWJvGVtj3g+7vYJxXC9GoHP6L9o3RKIE=
-github.com/solopine/txcar v0.0.32/go.mod h1:7+S24IXRZWWCeGzC2AlfbPTYSxtiExUxJqXd5v+32Cc=
+github.com/solopine/txcar v0.3.1 h1:nsQfmaOa3coUUaB3A2EX3Ny4QIOPTT///FuJjVBzKlI=
+github.com/solopine/txcar v0.3.1/go.mod h1:7+S24IXRZWWCeGzC2AlfbPTYSxtiExUxJqXd5v+32Cc=
 github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d/go.mod h1:UdhH50NIW0fCiwBSr0co2m7BnFLdv4fQTgdqdJTHFeE=
 github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e/go.mod h1:HuIsMU8RRBOtsCgI77wP899iHVBQpCmg4ErYMZB+2IA=
 github.com/spacemonkeygo/openssl v0.0.0-20181017203307-c2dcc5cca94a/go.mod h1:7AyxJNCJ7SBZ1MfVQCWD6Uqo2oubI2Eq2y2eqf+A5r0=

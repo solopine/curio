@@ -70,7 +70,7 @@ require (
 	github.com/samber/lo v1.39.0
 	github.com/sirupsen/logrus v1.9.2
 	github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb
-	github.com/solopine/txcar v0.0.32
+	github.com/solopine/txcar v0.3.1
 	github.com/stretchr/testify v1.9.0
 	github.com/triplewz/poseidon v0.0.2-0.20240407130934-5265fab9d889
 	github.com/urfave/cli/v2 v2.25.5
