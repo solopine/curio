@@ -211,7 +211,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	}
 
 	if p.MaxStorage > 0 {
-		used, err := p.diskUsage(ls, p.local)
+		used, err := p.diskUsage(ls, p.Local)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
@@ -812,15 +812,15 @@ func (st *Local) Local(ctx context.Context) ([]storiface.StoragePath, error) {
 		}
 
 		out = append(out, storiface.StoragePath{
-			ID:        id,
-			Weight:    si.Weight,
-			LocalPath: p.Local,
-			CanSeal:   si.CanSeal,
-			CanStore:  si.CanStore,
+			ID:          id,
+			Weight:      si.Weight,
+			LocalPath:   p.Local,
+			CanSeal:     si.CanSeal,
+			CanStore:    si.CanStore,
 			AllowTypes:  si.AllowTypes,
 			DenyTypes:   si.DenyTypes,
 			AllowMiners: si.AllowMiners,
-			DenyMiners:  si.DenyMiners,		})
+			DenyMiners:  si.DenyMiners})
 	}
 
 	return out, nil
