@@ -221,7 +221,7 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 	ret.ListenAddr = append(ret.ListenAddr, must.One(multiaddr.NewMultiaddr("/ip4/0.0.0.0/tcp/0/ws")))
 
 	{
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/wss", httpConf.DomainName, 443))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/wss", httpConf.DomainName, 24001))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}
@@ -239,7 +239,7 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 	}
 
 	{
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/https", httpConf.DomainName, 443))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/https", httpConf.DomainName, 24001))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}
