@@ -269,10 +269,11 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 
 			log.Infow("---- setup.NewIndexingTask")
 			indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
+			activeTasks = append(activeTasks, indexingTask)
 
-			log.Infow("---- setup.NewIPNITask")
-			ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
-			activeTasks = append(activeTasks, ipniTask, indexingTask)
+			//log.Infow("---- setup.NewIPNITask")
+			//ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
+			//activeTasks = append(activeTasks, ipniTask)
 		}
 
 		if cfg.HTTP.Enable {
