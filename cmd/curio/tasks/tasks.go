@@ -228,6 +228,7 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 		// Market tasks
 		if cfg.Subsystems.EnableDealMarket {
 			// Main market poller should run on all nodes
+			log.Infow("---- setup.NewCurioStorageDealMarket")
 			dm := storage_market.NewCurioStorageDealMarket(miners, db, cfg, si, full, as)
 			err := dm.StartMarket(ctx)
 			if err != nil {
@@ -235,20 +236,26 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 			}
 
 			if cfg.Subsystems.EnableCommP {
+				log.Infow("---- setup.NewCommpTask")
 				commpTask := storage_market.NewCommpTask(dm, db, must.One(slrLazy.Val()), full, cfg.Subsystems.CommPMaxTasks)
 				activeTasks = append(activeTasks, commpTask)
 			}
 
 			// PSD and Deal find task do not require many resources. They can run on all machines
+			log.Infow("---- setup.NewPSDTask")
 			psdTask := storage_market.NewPSDTask(dm, db, sender, as, &cfg.Market.StorageMarketConfig.MK12, full)
+
+			log.Infow("---- setup.NewFindDealTask")
 			dealFindTask := storage_market.NewFindDealTask(dm, db, full, &cfg.Market.StorageMarketConfig.MK12)
 
+			log.Infow("---- setup.NewCheckIndexesTask")
 			checkIndexesTask := indexing.NewCheckIndexesTask(db, iStore)
 
 			activeTasks = append(activeTasks, psdTask, dealFindTask, checkIndexesTask)
 
 			// Start libp2p hosts and handle streams. This is a special function which calls the shutdown channel
 			// instead of returning the error. This design is to allow libp2p take over if required
+			log.Infow("---- setup.NewDealProvider")
 			go libp2p.NewDealProvider(ctx, db, cfg, dm.MK12Handler, full, sender, miners, machine, shutdownChan)
 		}
 
@@ -260,12 +267,16 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 		if cfg.HTTP.Enable {
 			idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
 
+			log.Infow("---- setup.NewIndexingTask")
 			indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
+
+			log.Infow("---- setup.NewIPNITask")
 			ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
 			activeTasks = append(activeTasks, ipniTask, indexingTask)
 		}
 
 		if cfg.HTTP.Enable {
+			log.Infow("---- setup.StartHTTPServer")
 			err = cuhttp.StartHTTPServer(ctx, dependencies)
 			if err != nil {
 				return nil, xerrors.Errorf("failed to start the HTTP server: %w", err)
