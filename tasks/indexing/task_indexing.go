@@ -246,6 +246,12 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 
 	if txPiece.Version == txcarlib.V1 {
 		log.Infow("----txPiece V1 indexForTxPiece", "pieceCid", txPiece.PieceCid.String())
+
+		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
+                                     complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
+		if err != nil {
+			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline: %w", err)
+		}
 		return true, nil
 	}
 
