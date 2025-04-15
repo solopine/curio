@@ -250,7 +250,7 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
                                      complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
 		if err != nil {
-			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline: %w", err)
+			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline1: %w", err)
 		}
 		return true, nil
 	}
@@ -261,7 +261,14 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 
 	allRecs, err := i.parseRecordsForTxPiece(ctx, task, txPiece.PieceCid)
 	if err != nil {
-		return false, err
+		log.Infow("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String())
+
+		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
+                                     complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
+		if err != nil {
+			return false, xerrors.Errorf("----UPDATE market_mk12_deal_pipeline: updating pipeline2: %w", err)
+		}
+		return true, nil
 	}
 
 	dealCfg := i.cfg.Market.StorageMarketConfig
