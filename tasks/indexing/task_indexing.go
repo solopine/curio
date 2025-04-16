@@ -258,7 +258,7 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 
 	startTime := time.Now()
 
-	allRecs, err := txcar.ParseRecordsForTxPiece(ctx, i.pieceProvider, abi.ActorID(task.SpID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
+	allRecs, err := parseRecordsForTxPiece(ctx, i.pieceProvider, abi.ActorID(task.SpID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
 	if err != nil {
 		log.Infow("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String())
 

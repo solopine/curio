@@ -120,7 +120,7 @@ func (I *IPNITask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done b
 	}
 	if txPiece != nil {
 		log.Infow("----txPiece IPNITask.txPiece", "pieceCid", txPiece.PieceCid.String())
-		allRecs, err := txcar.ParseRecordsForTxPiece(ctx, I.pieceProvider, abi.ActorID(task.SPID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
+		allRecs, err := parseRecordsForTxPiece(ctx, I.pieceProvider, abi.ActorID(task.SPID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
 		if err != nil {
 			return false, xerrors.Errorf("ParseRecordsForTxPiece: %w", err)
 		}
