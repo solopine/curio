@@ -2,7 +2,6 @@ package indexing
 
 import (
 	"context"
-	"encoding/gob"
 	"errors"
 	txcarlib "github.com/solopine/txcar/txcar"
 	"time"
@@ -259,7 +258,7 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 
 	startTime := time.Now()
 
-	allRecs, err := i.parseRecordsForTxPiece(ctx, task, txPiece.PieceCid)
+	allRecs, err := txcar.ParseRecordsForTxPiece(ctx, i.pieceProvider, abi.ActorID(task.SpID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
 	if err != nil {
 		log.Infow("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String())
 
@@ -494,49 +493,6 @@ func (i *IndexingTask) GetSpid(db *harmonydb.DB, taskID int64) string {
 		return ""
 	}
 	return spid
-}
-
-func (i *IndexingTask) parseRecordsForTxPiece(ctx context.Context, task itask, pieceCid cid.Cid) ([]indexstore.Record, error) {
-	log.Infow("ParseRecordsForTxPiece", "minerAddr", abi.ActorID(task.SpID).String(), "task.Sector", task.Sector, "pieceCid", pieceCid)
-
-	reader, err := i.pieceProvider.TxReadUnsealed(ctx, storiface.SectorRef{
-		ID: abi.SectorID{
-			Miner:  abi.ActorID(task.SpID),
-			Number: task.Sector,
-		},
-		ProofType: task.Proof,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	dec := gob.NewDecoder(reader)
-
-	// 1. read txpiece
-	var txPiece txcarlib.TxPiece
-	if err := dec.Decode(&txPiece); err != nil {
-		return nil, err
-	}
-	if txPiece.PieceCid != pieceCid {
-		return nil, xerrors.Errorf("pieceCid error. pieceCid in file: %s, pieceCid expected: %s", txPiece.PieceCid, pieceCid)
-	}
-
-	// 2. read txRecs
-	var txRecs []txcarlib.TxBlockRecord
-	if err := dec.Decode(&txRecs); err != nil {
-		return nil, err
-	}
-
-	recs := make([]indexstore.Record, 0, len(txRecs))
-	for _, txRec := range txRecs {
-		recs = append(recs, indexstore.Record{
-			Cid:    txRec.Cid,
-			Offset: txRec.Offset,
-			Size:   txRec.Size,
-		})
-	}
-
-	return recs, nil
 }
 
 var _ = harmonytask.Reg(&IndexingTask{})

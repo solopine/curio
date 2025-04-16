@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"net"
 	"runtime/debug"
 	"strings"
@@ -222,7 +223,7 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 
 	{
 		//publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/wss", httpConf.DomainName, 24001))
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/ws", httpConf.DomainName, 24001))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/ws", httpConf.DomainName, txcar.TxHttpPort))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}
@@ -241,7 +242,7 @@ func getCfg(ctx context.Context, db *harmonydb.DB, httpConf config.HTTPConfig, m
 
 	{
 		//publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/https", httpConf.DomainName, 24001))
-		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/http", httpConf.DomainName, 24001))
+		publicAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/dns/%s/tcp/%d/http", httpConf.DomainName, txcar.TxHttpPort))
 		if err != nil {
 			return nil, xerrors.Errorf("creating public address: %w", err)
 		}

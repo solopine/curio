@@ -90,7 +90,7 @@ require (
 	github.com/samber/lo v1.39.0
 	github.com/sirupsen/logrus v1.9.2
 	github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb
-	github.com/solopine/txcar v0.8.0
+	github.com/solopine/txcar v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/triplewz/poseidon v0.0.2
 	github.com/urfave/cli/v2 v2.27.5
