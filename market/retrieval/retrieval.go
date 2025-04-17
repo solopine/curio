@@ -13,6 +13,7 @@ import (
 	"github.com/filecoin-project/curio/lib/cachedreader"
 	"github.com/filecoin-project/curio/market/indexstore"
 	"github.com/filecoin-project/curio/market/retrieval/remoteblockstore"
+	u "github.com/ipfs/go-ipfs-util"
 )
 
 var log = logging.Logger("retrievals")
@@ -29,6 +30,8 @@ const ipfsPrefix = "/ipfs/"
 const infoPage = "/info"
 
 func NewRetrievalProvider(ctx context.Context, db *harmonydb.DB, idxStore *indexstore.IndexStore, cpr *cachedreader.CachedPieceReader) *Provider {
+	u.Debug = true
+
 	bs := remoteblockstore.NewRemoteBlockstore(idxStore, db, cpr)
 	lsys := storeutil.LinkSystemForBlockstore(bs)
 	fr := frisbii.NewHttpIpfs(ctx, lsys)
