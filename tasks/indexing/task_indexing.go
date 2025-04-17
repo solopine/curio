@@ -260,7 +260,7 @@ func (i *IndexingTask) indexForTxPiece(ctx context.Context, taskID harmonytask.T
 
 	allRecs, err := parseRecordsForTxPiece(ctx, i.pieceProvider, abi.ActorID(task.SpID), abi.SectorNumber(task.Sector), task.Proof, txPiece.PieceCid)
 	if err != nil {
-		log.Infow("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String())
+		log.Errorw("----indexForTxPiece.parseRecordsForTxPiece error", "sp", task.SpID, "sector", task.Sector, "version", txPiece.Version, "pieceCid", txPiece.PieceCid.String(), "error", err)
 
 		_, err = i.db.Exec(ctx, `UPDATE market_mk12_deal_pipeline SET indexed = FALSE, should_index = FALSE, indexing_task_id = NULL, 
                                      complete = TRUE WHERE uuid = $1 AND indexing_task_id = $2`, task.UUID, taskID)
