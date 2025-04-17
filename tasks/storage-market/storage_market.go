@@ -200,7 +200,7 @@ func (d *CurioStorageDealMarket) runPoller(ctx context.Context) {
 
 func (d *CurioStorageDealMarket) poll(ctx context.Context) {
 
-	//d.createIndexingTaskForMigratedDeals(ctx)
+	d.createIndexingTaskForMigratedDeals(ctx)
 	/*
 		FULL DEAL FLOW:
 			Online:
