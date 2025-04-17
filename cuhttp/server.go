@@ -3,6 +3,7 @@ package cuhttp
 import (
 	"context"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"net/http"
 	"strings"
 	"time"
@@ -115,7 +116,8 @@ func StartHTTPServer(ctx context.Context, d *deps.Deps) error {
 	chiRouter.Use(secureHeaders)
 
 	if cfg.EnableCORS {
-		chiRouter.Use(handlers.CORS(handlers.AllowedOrigins([]string{"https://" + cfg.DomainName})))
+		url := fmt.Sprintf("http://%s:%d", cfg.DomainName, txcar.TxHttpPort)
+		chiRouter.Use(handlers.CORS(handlers.AllowedOrigins([]string{url})))
 	}
 
 	// Set up the compression middleware with custom compression levels
@@ -172,7 +174,7 @@ func StartHTTPServer(ctx context.Context, d *deps.Deps) error {
 
 	// Start the server with TLS
 	go func() {
-		log.Infof("Starting HTTPS server for https://%s on %s", cfg.DomainName, cfg.ListenAddress)
+		log.Infof("Starting HTTPS server for http://%s:%d on %s", cfg.DomainName, txcar.TxHttpPort, cfg.ListenAddress)
 		var serr error
 		if !cfg.DelegateTLS {
 			serr = server.ListenAndServeTLS("", "")
