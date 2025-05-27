@@ -191,7 +191,7 @@ func (t *WinPostTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (don
 	})
 
 	// MAKE A MINING ATTEMPT!!
-	log.Debugw("attempting to mine a block", "tipset", types.LogCids(base.TipSet.Cids()), "null-rounds", base.AddRounds)
+	log.Debugw("attempting to mine a block", "maddr", maddr.String(), "round", round, "tipset", types.LogCids(base.TipSet.Cids()), "null-rounds", base.AddRounds)
 
 	mbi, err := t.api.MinerGetBaseInfo(ctx, maddr, round, base.TipSet.Key())
 	if err != nil {
@@ -239,6 +239,8 @@ func (t *WinPostTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (don
 		if len(bvals) > 0 {
 			rbase = bvals[len(bvals)-1]
 		}
+
+		log.Debugw("----IsRoundWinner", "maddr", maddr.String(), "round", round, "mbi.MinerPower", mbi.MinerPower, "mbi.NetworkPower", mbi.NetworkPower)
 
 		eproof, err = gen.IsRoundWinner(ctx, round, maddr, rbase, mbi, t.api)
 		if err != nil {
@@ -535,7 +537,7 @@ func (t *WinPostTask) CanAccept(ids []harmonytask.TaskID, engine *harmonytask.Ta
 }
 
 func (t *WinPostTask) TypeDetails() harmonytask.TaskTypeDetails {
-	gpu := 1.0
+	gpu := 0.1
 	if seal.IsDevnet {
 		gpu = 0
 	}
@@ -718,12 +720,15 @@ func (t *WinPostTask) mineBasic(ctx context.Context) {
 
 				_, err = tx.Exec(`INSERT INTO mining_tasks (task_id, sp_id, epoch, base_compute_time) VALUES ($1, $2, $3, $4)`, id, spID, workBase.epoch(), workBase.ComputeTime.UTC())
 				if err != nil {
+					log.Errorw("INSERT INTO mining_tasks (task_id, sp_id, epoch, base_compute_time) VALUES ($1, $2, $3, $4)", "id", id, "spID", spID, "workBase.epoch()", workBase.epoch(), "workBase.ComputeTime.UTC()", workBase.ComputeTime.UTC())
 					return false, xerrors.Errorf("inserting mining_tasks: %w", err)
 				}
 
 				for _, c := range workBase.TipSet.Cids() {
 					_, err = tx.Exec(`INSERT INTO mining_base_block (task_id, sp_id, block_cid) VALUES ($1, $2, $3)`, id, spID, c)
 					if err != nil {
+						log.Infow("INSERT INTO mining_base_block (task_id, sp_id, block_cid) VALUES ($1, $2, $3)", "id", id, "spID", spID, "c", c)
+						log.Errorf("----inserting mining base blocks: %v", err)
 						return false, xerrors.Errorf("inserting mining base blocks: %w", err)
 					}
 				}
