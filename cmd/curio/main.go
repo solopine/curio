@@ -42,6 +42,7 @@ func SetupLogLevels() {
 		_ = logging.SetLogLevel("harmonytask", "DEBUG")
 		_ = logging.SetLogLevel("rpc", "ERROR")
 	}
+	_ = logging.SetLogLevel("indexing", "INFO")
 }
 
 func setupCloseHandler() {

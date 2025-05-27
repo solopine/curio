@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -67,6 +68,12 @@ var runCmd = &cli.Command{
 			EnvVars:     []string{"CURIO_NODE_NAME"},
 			DefaultText: translations.T(""),
 		},
+		&cli.StringFlag{
+			Name:    "txdc-base-url",
+			Usage:   "txdc-base-url. eg 'http://localhost:8042'",
+			EnvVars: []string{"TXDC_BASE_URL"},
+			Value:   "",
+		},
 	},
 	Action: func(cctx *cli.Context) (err error) {
 		defer func() {
@@ -103,6 +110,7 @@ var runCmd = &cli.Command{
 			ctx, ctxclose = context.WithCancel(ctx)
 			go func() {
 				<-shutdownChan
+				log.Warnw("shutdownChan received...")
 				ctxclose()
 			}()
 		}
@@ -124,7 +132,8 @@ var runCmd = &cli.Command{
 
 		go ffiSelfTest() // Panics on failure
 
-		taskEngine, err := tasks.StartTasks(ctx, dependencies, shutdownChan)
+		time.Sleep(10 * time.Second)
+		taskEngine, err := tasks.StartTasks(ctx, dependencies, shutdownChan, cctx.String("txdc-base-url"))
 
 		if err != nil {
 			return xerrors.Errorf("starting tasks: %w", err)
