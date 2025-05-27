@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"net/http"
 	"strings"
 	"time"
@@ -140,7 +141,7 @@ type ServiceDeps struct {
 	EthSender *message.SenderETH
 }
 
-func StartHTTPServer(ctx context.Context, d *deps.Deps, sd *ServiceDeps, dm *storage_market.CurioStorageDealMarket) error {
+func StartHTTPServer(ctx context.Context, d *deps.Deps, sd *ServiceDeps, dm *storage_market.CurioStorageDealMarket, txdcBaseUrl string) error {
 	cfg := d.Cfg.HTTP
 
 	// Setup the Chi router for more complex routing (if needed in the future)
@@ -155,7 +156,8 @@ func StartHTTPServer(ctx context.Context, d *deps.Deps, sd *ServiceDeps, dm *sto
 	chiRouter.Use(corsHeaders)
 
 	if cfg.EnableCORS {
-		chiRouter.Use(handlers.CORS(handlers.AllowedOrigins([]string{"https://" + cfg.DomainName})))
+		url := fmt.Sprintf("http://%s:%d", cfg.DomainName, txcar.TxHttpPort)
+		chiRouter.Use(handlers.CORS(handlers.AllowedOrigins([]string{url})))
 	}
 
 	// Set up the compression middleware with custom compression levels
@@ -182,7 +184,7 @@ func StartHTTPServer(ctx context.Context, d *deps.Deps, sd *ServiceDeps, dm *sto
 		_, _ = fmt.Fprintf(w, "Service is up and running")
 	})
 
-	chiRouter, err = attachRouters(ctx, chiRouter, d, sd, dm)
+	chiRouter, err = attachRouters(ctx, chiRouter, d, sd, dm, txdcBaseUrl)
 	if err != nil {
 		return xerrors.Errorf("failed to attach routers: %w", err)
 	}
@@ -212,7 +214,7 @@ func StartHTTPServer(ctx context.Context, d *deps.Deps, sd *ServiceDeps, dm *sto
 
 	// Start the server with TLS
 	go func() {
-		log.Infof("Starting HTTPS server for https://%s on %s", cfg.DomainName, cfg.ListenAddress)
+		log.Infof("Starting HTTPS server for http://%s:%d on %s", cfg.DomainName, txcar.TxHttpPort, cfg.ListenAddress)
 		var serr error
 		if !cfg.DelegateTLS {
 			serr = server.ListenAndServeTLS("", "")
@@ -276,9 +278,9 @@ func (c cache) Delete(ctx context.Context, key string) error {
 
 var _ autocert.Cache = cache{}
 
-func attachRouters(ctx context.Context, r *chi.Mux, d *deps.Deps, sd *ServiceDeps, dm *storage_market.CurioStorageDealMarket) (*chi.Mux, error) {
+func attachRouters(ctx context.Context, r *chi.Mux, d *deps.Deps, sd *ServiceDeps, dm *storage_market.CurioStorageDealMarket, txdcBaseUrl string) (*chi.Mux, error) {
 	// Attach retrievals
-	rp := retrieval.NewRetrievalProvider(ctx, d.DB, d.IndexStore, d.CachedPieceReader)
+	rp := retrieval.NewRetrievalProvider(ctx, d.DB, d.IndexStore, d.CachedPieceReader, txdcBaseUrl)
 	retrieval.Router(r, rp)
 
 	// Attach IPNI

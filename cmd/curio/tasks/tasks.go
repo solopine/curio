@@ -88,7 +88,7 @@ func WindowPostScheduler(ctx context.Context, fc config.CurioFees, pc config.Cur
 	return computeTask, submitTask, recoverTask, nil
 }
 
-func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan struct{}) (*harmonytask.TaskEngine, error) {
+func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan struct{}, txdcBaseUrl string) (*harmonytask.TaskEngine, error) {
 	cfg := dependencies.Cfg
 	db := dependencies.DB
 	full := dependencies.Chain
@@ -304,14 +304,21 @@ func StartTasks(ctx context.Context, dependencies *deps.Deps, shutdownChan chan 
 			activeTasks = append(activeTasks, pdpNotifTask, pdpProveTask, pdpNextProvingPeriodTask, pdpInitProvingPeriodTask)
 		}
 
-		idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
+		if cfg.HTTP.Enable {
+			idxMax := taskhelp.Max(cfg.Subsystems.IndexingMaxTasks)
 
-		indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax)
-		ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
-		activeTasks = append(activeTasks, ipniTask, indexingTask)
+			log.Infow("---- setup.NewIndexingTask")
+			indexingTask := indexing.NewIndexingTask(db, sc, iStore, pp, cfg, idxMax, dependencies.Si, dependencies.LocalStore)
+			activeTasks = append(activeTasks, indexingTask)
+
+			log.Infow("---- setup.NewIPNITask")
+			ipniTask := indexing.NewIPNITask(db, sc, iStore, pp, cfg, idxMax)
+			activeTasks = append(activeTasks, ipniTask)
+		}
 
 		if cfg.HTTP.Enable {
-			err = cuhttp.StartHTTPServer(ctx, dependencies, &sdeps, dm)
+			log.Infow("---- setup.StartHTTPServer")
+			err = cuhttp.StartHTTPServer(ctx, dependencies, &sdeps, dm, txdcBaseUrl)
 			if err != nil {
 				return nil, xerrors.Errorf("failed to start the HTTP server: %w", err)
 			}
@@ -538,18 +545,24 @@ func machineDetails(deps *deps.Deps, activeTasks []harmonytask.TaskInterface, ma
 		}
 
 		for _, miner := range miners {
-			var myPostIsHandled bool
+			var myWdPostIsHandled bool
+			var myWinPostIsHandled bool
 			for _, m := range allMachines {
 				if !lo.Contains(strings.Split(m.Miners, ","), miner) {
 					continue
 				}
-				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") && lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
-					myPostIsHandled = true
-					break
+				if lo.Contains(strings.Split(m.Tasks, ","), "WdPost") {
+					myWdPostIsHandled = true
+				}
+				if lo.Contains(strings.Split(m.Tasks, ","), "WinPost") {
+					myWinPostIsHandled = true
 				}
 			}
-			if !myPostIsHandled {
-				log.Errorf("No PoSt tasks are running for miner %s. Start handling PoSts immediately with:\n\tcurio run --layers=\"post\" ", miner)
+			if !myWdPostIsHandled {
+				log.Errorf("No WdPoSt tasks are running for miner %s. Start handling WdPoSts immediately with:\n\tcurio run --layers=\"wdpost\" ", miner)
+			}
+			if !myWinPostIsHandled {
+				log.Errorf("No WinPoSt tasks are running for miner %s. Start handling WinPoSts immediately with:\n\tcurio run --layers=\"winpost\" ", miner)
 			}
 		}
 	}

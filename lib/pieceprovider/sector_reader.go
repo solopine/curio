@@ -148,6 +148,10 @@ func (p *SectorReader) IsUnsealed(ctx context.Context, sector storiface.SectorRe
 	return p.storage.CheckIsUnsealed(ctxLock, sector, abi.PaddedPieceSize(offset.Padded()), size.Padded())
 }
 
+func (p *SectorReader) TxReadUnsealed(ctx context.Context, s storiface.SectorRef) (io.ReadCloser, error) {
+	return p.storage.ReaderSeq(ctx, s, storiface.FTUnsealed)
+}
+
 type funcCloser func() error
 
 func (f funcCloser) Close() error {
