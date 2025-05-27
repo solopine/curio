@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/filecoin-project/curio/txcar"
 	"net/http"
 	"net/url"
 	"path"
@@ -155,7 +156,7 @@ func NewProvider(d *deps.Deps) (*Provider, error) {
 	httpServerAddresses := map[string]multiaddr.Multiaddr{}
 
 	{
-		u, err := url.Parse(fmt.Sprintf("https://%s", d.Cfg.HTTP.DomainName))
+		u, err := url.Parse(fmt.Sprintf("http://%s:%d", d.Cfg.HTTP.DomainName, txcar.TxHttpPort))
 		if err != nil {
 			return nil, xerrors.Errorf("parsing announce address domain: %w", err)
 		}

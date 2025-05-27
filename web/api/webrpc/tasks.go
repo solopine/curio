@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/filecoin-project/go-state-types/abi"
 	"strconv"
 	"time"
 
@@ -26,7 +27,8 @@ type TaskSummary struct {
 	// db ignored
 	SincePostedStr string `db:"-"`
 
-	Miner string
+	Miner  string
+	Sector string `db:"-"`
 }
 
 func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) {
@@ -64,6 +66,14 @@ func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) 
 				ts[i].Miner = ""
 			}
 		}
+		if v, ok := a.sectorIDs[ts[i].Name]; ok {
+			sid, err := v.GetSectorID(a.deps.DB, ts[i].ID)
+			if err != nil {
+				log.Warnw("GetSectorID", "taskId", ts[i].ID)
+			} else {
+				ts[i].Sector = sid.Number.String()
+			}
+		}
 	}
 
 	return ts, nil
@@ -71,6 +81,10 @@ func (a *WebRPC) ClusterTaskSummary(ctx context.Context) ([]TaskSummary, error) 
 
 type SpidGetter interface {
 	GetSpid(db *harmonydb.DB, taskID int64) string
+}
+
+type SectorIDGetter interface {
+	GetSectorID(db *harmonydb.DB, taskID int64) (*abi.SectorID, error)
 }
 
 func makeTaskSPIDs() map[string]SpidGetter {
@@ -191,4 +205,17 @@ func (a *WebRPC) RestartFailedTask(ctx context.Context, taskID int64) error {
 	}
 
 	return nil
+}
+
+func makeTaskSectorIDs() map[string]SectorIDGetter {
+	sectorIdGetters := lo.Filter(lo.Values(harmonytask.Registry), func(t harmonytask.TaskInterface, _ int) bool {
+		_, ok := t.(SectorIDGetter)
+		return ok
+	})
+	sectorIds := make(map[string]SectorIDGetter)
+	for _, t := range sectorIdGetters {
+		ttd := t.TypeDetails()
+		sectorIds[ttd.Name] = t.(SectorIDGetter)
+	}
+	return sectorIds
 }

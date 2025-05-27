@@ -17,7 +17,7 @@ import (
 	"github.com/filecoin-project/curio/harmony/harmonydb"
 )
 
-var LOOKS_DEAD_TIMEOUT = 10 * time.Minute // Time w/o minute heartbeats
+var LOOKS_DEAD_TIMEOUT = 30 * time.Minute // Time w/o minute heartbeats
 
 type Resources struct {
 	Cpu       int
@@ -145,7 +145,7 @@ func getResources() (res Resources, err error) {
 
 	res = Resources{
 		Cpu: runtime.NumCPU(),
-		Ram: mem.Available,
+		Ram: mem.Total - 64*1024*1024*1024, //64G for buf
 		Gpu: getGPUDevices(),
 	}
 
