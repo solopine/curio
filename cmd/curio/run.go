@@ -67,6 +67,12 @@ var runCmd = &cli.Command{
 			EnvVars:     []string{"CURIO_NODE_NAME"},
 			DefaultText: translations.T(""),
 		},
+		&cli.StringFlag{
+			Name:    "txdc-base-url",
+			Usage:   "txdc-base-url. eg 'http://localhost:8042'",
+			EnvVars: []string{"TXDC_BASE_URL"},
+			Value:   "",
+		},
 	},
 	Action: func(cctx *cli.Context) (err error) {
 		defer func() {
@@ -124,7 +130,9 @@ var runCmd = &cli.Command{
 
 		go ffiSelfTest() // Panics on failure
 
-		taskEngine, err := tasks.StartTasks(ctx, dependencies, shutdownChan)
+		txdcBaseUrl := cctx.String("txdc-base-url")
+		log.Infow("txdc - get from txdc-base-url", "txdcBaseUrl", txdcBaseUrl)
+		taskEngine, err := tasks.StartTasks(ctx, dependencies, shutdownChan, txdcBaseUrl)
 
 		if err != nil {
 			return xerrors.Errorf("starting tasks: %w", err)

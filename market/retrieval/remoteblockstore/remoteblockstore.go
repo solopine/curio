@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/xerrors"
 	"io"
+	"net/http"
 
 	"github.com/hashicorp/go-multierror"
 	blocks "github.com/ipfs/go-block-format"
@@ -40,6 +42,9 @@ type RemoteBlockstore struct {
 	blockMetrics *BlockMetrics
 	db           *harmonydb.DB
 	cpr          *cachedreader.CachedPieceReader
+
+	// http://ip:port
+	txdcBaseUrl string
 }
 
 type BlockMetrics struct {
@@ -55,7 +60,7 @@ type BlockMetrics struct {
 	GetSizeSuccessResponseCount *stats.Int64Measure
 }
 
-func NewRemoteBlockstore(api idxAPI, db *harmonydb.DB, cpr *cachedreader.CachedPieceReader) *RemoteBlockstore {
+func NewRemoteBlockstore(api idxAPI, db *harmonydb.DB, cpr *cachedreader.CachedPieceReader, txdcBaseUrl string) *RemoteBlockstore {
 	httpBlockMetrics := &BlockMetrics{
 		GetRequestCount:             HttpRblsGetRequestCount,
 		GetFailResponseCount:        HttpRblsGetFailResponseCount,
@@ -74,10 +79,12 @@ func NewRemoteBlockstore(api idxAPI, db *harmonydb.DB, cpr *cachedreader.CachedP
 		blockMetrics: httpBlockMetrics,
 		db:           db,
 		cpr:          cpr,
+		txdcBaseUrl:  txdcBaseUrl,
 	}
 }
 
 func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block, err error) {
+	log.Infow("start txdc.Get", "c", c.String())
 	if ro.blockMetrics != nil {
 		stats.Record(ctx, ro.blockMetrics.GetRequestCount.M(1))
 	}
@@ -92,6 +99,7 @@ func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block,
 
 	// Get the pieces that contain the cid
 	pieces, err := ro.idxApi.PiecesContainingMultihash(ctx, c.Hash())
+	log.Infow("txdc.Get PiecesContainingMultihash", "pieces", len(pieces), "c", c.String())
 
 	// Check if it's an identity cid, if it is, return its digest
 	if err != nil {
@@ -100,6 +108,7 @@ func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block,
 			if ro.blockMetrics != nil {
 				stats.Record(ctx, ro.blockMetrics.GetSuccessResponseCount.M(1))
 			}
+			log.Infow("txdc.Get isIdentity", "c", c.String())
 			return blocks.NewBlockWithCid(digest, c)
 		}
 		if ro.blockMetrics != nil {
@@ -115,6 +124,23 @@ func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block,
 	var merr error
 	for _, piece := range pieces {
 		data, err := func() ([]byte, error) {
+			log.Infow("txdc.Get process piece", "pieceCid", piece.PieceCid)
+
+			// Get the offset of the block within the piece (CAR file)
+			offset, err := ro.idxApi.GetOffset(ctx, piece.PieceCid, c.Hash())
+			if err != nil {
+				return nil, fmt.Errorf("getting offset/size for cid %s in piece %s: %w", c, piece.PieceCid, err)
+			}
+			log.Infow("txdc.Get", "offset", offset, "pieceCid", piece.PieceCid)
+
+			data, err := ro.txdcBlockstoreGet(ctx, piece.PieceCid, c, int64(offset), piece.BlockSize)
+			if err == nil {
+				log.Infow("txdcBlockstoreGet successful", "piece.PieceCid", piece.PieceCid, "c", c)
+				return data, nil
+			}
+
+			log.Infow("txdcBlockstoreGet fail, so fallback to normal", "piece.PieceCid", piece.PieceCid, "c", c)
+
 			// Get a reader over the piece data
 			reader, _, err := ro.cpr.GetSharedPieceReader(ctx, piece.PieceCid)
 			if err != nil {
@@ -123,12 +149,6 @@ func (ro *RemoteBlockstore) Get(ctx context.Context, c cid.Cid) (b blocks.Block,
 			defer func(reader storiface.Reader) {
 				_ = reader.Close()
 			}(reader)
-
-			// Get the offset of the block within the piece (CAR file)
-			offset, err := ro.idxApi.GetOffset(ctx, piece.PieceCid, c.Hash())
-			if err != nil {
-				return nil, fmt.Errorf("getting offset/size for cid %s in piece %s: %w", c, piece.PieceCid, err)
-			}
 
 			// Seek to the section offset
 			readerAt := io.NewSectionReader(reader, int64(offset), int64(piece.BlockSize+MaxCarBlockPrefixSize))
@@ -231,6 +251,62 @@ func (ro *RemoteBlockstore) blockstoreGetSize(ctx context.Context, c cid.Cid) (i
 	}
 
 	return 0, merr
+}
+
+func (ro *RemoteBlockstore) checkTxdcServerHealthy(ctx context.Context) bool {
+	url := ro.txdcBaseUrl + "/remote/health"
+	log.Infow("txdc.checkTxdcServerHealthy", "url", url)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Errorf("RemoteBlockstore.checkTxdcServerHealthy NewRequest. err: %v", err)
+		return false
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Errorf("RemoteBlockstore.checkTxdcServerHealthy Do req. err: %v", err)
+		return false
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close() // nolint
+		log.Errorf("RemoteBlockstore.checkTxdcServerHealthy non-200 code: %d", resp.StatusCode)
+		return false
+	}
+	return true
+}
+
+func (ro *RemoteBlockstore) txdcBlockstoreGet(ctx context.Context, pieceCid cid.Cid, blockCid cid.Cid, blockOffset int64, blockSize uint64) ([]byte, error) {
+	log.Infow("start txdc.txdcBlockstoreGet", "pieceCid", pieceCid, "blockCid", blockCid, "blockOffset", blockOffset, "blockSize", blockSize)
+	if !ro.checkTxdcServerHealthy(ctx) {
+		return nil, xerrors.Errorf("checkTxdcServerHealthy false")
+	}
+
+	// /remote/piece/{pieceCid}/block/{blockCid}/{offset}/{size}
+	url := fmt.Sprintf("%s/remote/piece/%s/block/%s/%d/%d", ro.txdcBaseUrl, pieceCid.String(), blockCid.String(), blockOffset, blockSize)
+	log.Infow("start txdc.txdcBlockstoreGet", "url", url, "pieceCid", pieceCid, "blockCid", blockCid, "blockOffset", blockOffset, "blockSize", blockSize)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, xerrors.Errorf("request: %w", err)
+	}
+
+	req = req.WithContext(ctx)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, xerrors.Errorf("do request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close() // nolint
+		return nil, xerrors.Errorf("non-200 code: %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
 func isIdentity(c cid.Cid) (digest []byte, ok bool, err error) {
