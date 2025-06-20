@@ -28,8 +28,8 @@ const piecePrefix = "/piece/"
 const ipfsPrefix = "/ipfs/"
 const infoPage = "/info"
 
-func NewRetrievalProvider(ctx context.Context, db *harmonydb.DB, idxStore *indexstore.IndexStore, cpr *cachedreader.CachedPieceReader) *Provider {
-	bs := remoteblockstore.NewRemoteBlockstore(idxStore, db, cpr)
+func NewRetrievalProvider(ctx context.Context, db *harmonydb.DB, idxStore *indexstore.IndexStore, cpr *cachedreader.CachedPieceReader, txdcBaseUrl string) *Provider {
+	bs := remoteblockstore.NewRemoteBlockstore(idxStore, db, cpr, txdcBaseUrl)
 	lsys := storeutil.LinkSystemForBlockstore(bs)
 	fr := frisbii.NewHttpIpfs(ctx, lsys)
 
