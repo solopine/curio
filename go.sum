@@ -49,6 +49,8 @@ github.com/CAFxX/httpcompression v0.0.9 h1:0ue2X8dOLEpxTm8tt+OdHcgA+gbDge0OqFQWG
 github.com/CAFxX/httpcompression v0.0.9/go.mod h1:XX8oPZA+4IDcfZ0A71Hz0mZsv/YJOgYygkFhizVPilM=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=
 github.com/DataDog/zstd v1.4.5/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t7BBo=
+github.com/Eyevinn/mp4ff v0.48.0 h1:PwCeFOHGi07LffijQtFmIeIIY7BRURN2c5I2tnQbwds=
+github.com/Eyevinn/mp4ff v0.48.0/go.mod h1:hJNUUqOBryLAzUW9wpCJyw2HaI+TCd2rUPhafoS5lgg=
 github.com/GeertJohan/go.incremental v1.0.0 h1:7AH+pY1XUgQE4Y1HcXYaMqAI0m9yrFqo/jt0CW30vsg=
 github.com/GeertJohan/go.incremental v1.0.0/go.mod h1:6fAjUhbVuX1KcMD3c8TEgVUqmo4seqhv0i0kdATSkM0=
 github.com/GeertJohan/go.rice v1.0.3 h1:k5viR+xGtIhF61125vCE1cmJ5957RQGXG6dmbaWZSmI=
@@ -356,8 +358,6 @@ github.com/filecoin-project/go-statestore v0.2.0 h1:cRRO0aPLrxKQCZ2UOQbzFGn4WDNd
 github.com/filecoin-project/go-statestore v0.2.0/go.mod h1:8sjBYbS35HwPzct7iT4lIXjLlYyPor80aU7t7a/Kspo=
 github.com/filecoin-project/go-storedcounter v0.1.0 h1:Mui6wSUBC+cQGHbDUBcO7rfh5zQkWJM/CpAZa/uOuus=
 github.com/filecoin-project/go-storedcounter v0.1.0/go.mod h1:4ceukaXi4vFURIoxYMfKzaRF5Xv/Pinh2oTnoxpv+z8=
-github.com/filecoin-project/lotus v1.34.1 h1:wrqkeNlfNGBhEOdYsDiOR0XTqGkzVa3Ws0u/UIPSwX0=
-github.com/filecoin-project/lotus v1.34.1/go.mod h1:2qrUwIdtAAVvduoFISqB5d+bUHRQpRWNQhLn0bmhVog=
 github.com/filecoin-project/pubsub v1.0.0 h1:ZTmT27U07e54qV1mMiQo4HDr0buo8I1LDHBYLXlsNXM=
 github.com/filecoin-project/pubsub v1.0.0/go.mod h1:GkpB33CcUtUNrLPhJgfdy4FDx4OMNR9k+46DHx/Lqrg=
 github.com/filecoin-project/specs-actors v0.9.13/go.mod h1:TS1AW/7LbG+615j4NsjMK1qlpAwaFsG9w0V2tg2gSao=
@@ -1302,6 +1302,10 @@ github.com/smartystreets/goconvey v1.7.2 h1:9RBaZCeXEQ3UselpuwUQHltGVXvdwm6cv1hg
 github.com/smartystreets/goconvey v1.7.2/go.mod h1:Vw0tHAZW6lzCRk3xgdin6fKYcG+G3Pg9vgXWeJpQFMM=
 github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb h1:78YgPq3NbWnO4xyNhLsn2zitc7NiZpjQZ560rsxVLm4=
 github.com/snadrus/must v0.0.0-20240605044437-98cedd57f8eb/go.mod h1:YnCEHk4UlWROjM3YzC2pbSTq+iynM3ZaLoVDUI8QGpE=
+github.com/solopine/lotus v1.34.0-curio-1 h1:dAD9TWPzUIxUT2HVZM4UXjQrmv00u4shA4efE5DxSQM=
+github.com/solopine/lotus v1.34.0-curio-1/go.mod h1:2qrUwIdtAAVvduoFISqB5d+bUHRQpRWNQhLn0bmhVog=
+github.com/solopine/txcar v0.20.1 h1:V643bW+ighZCINyzlEoi3GN5S26ABqKWSQ+L3rGDrXo=
+github.com/solopine/txcar v0.20.1/go.mod h1:eukWeG65ottGKq+3lpAGGXfK341X0kyqQ+MEC4m6+9w=
 github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d/go.mod h1:UdhH50NIW0fCiwBSr0co2m7BnFLdv4fQTgdqdJTHFeE=
 github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e/go.mod h1:HuIsMU8RRBOtsCgI77wP899iHVBQpCmg4ErYMZB+2IA=
 github.com/spacemonkeygo/openssl v0.0.0-20181017203307-c2dcc5cca94a/go.mod h1:7AyxJNCJ7SBZ1MfVQCWD6Uqo2oubI2Eq2y2eqf+A5r0=
