@@ -19,7 +19,7 @@ require (
 	github.com/elastic/go-sysinfo v1.15.4
 	github.com/ethereum/go-ethereum v1.17.2
 	github.com/fatih/color v1.19.0
-	github.com/filecoin-project/filecoin-ffi v1.36.0
+	github.com/filecoin-project/filecoin-ffi v1.36.1
 	github.com/filecoin-project/go-address v1.2.0
 	github.com/filecoin-project/go-bitfield v0.2.4
 	github.com/filecoin-project/go-cbor-util v0.0.2
@@ -32,7 +32,7 @@ require (
 	github.com/filecoin-project/go-jsonrpc v0.10.1
 	github.com/filecoin-project/go-keccak v0.1.0
 	github.com/filecoin-project/go-padreader v0.0.1
-	github.com/filecoin-project/go-state-types v0.18.0
+	github.com/filecoin-project/go-state-types v0.19.0-rc1
 	github.com/filecoin-project/go-statestore v0.2.0
 	github.com/filecoin-project/lotus v1.36.0
 	github.com/filecoin-project/specs-actors/v2 v2.3.6
@@ -70,7 +70,7 @@ require (
 	github.com/ipld/go-car v0.6.3
 	github.com/ipld/go-car/v2 v2.16.0
 	github.com/ipld/go-fixtureplate v0.1.0
-	github.com/ipld/go-ipld-prime v0.23.0
+	github.com/ipld/go-ipld-prime v0.24.0
 	github.com/ipld/go-trustless-utils v0.8.0
 	github.com/ipni/go-libipni v0.7.7
 	github.com/jellydator/ttlcache/v2 v2.11.1
@@ -110,13 +110,13 @@ require (
 	go.opencensus.io v0.24.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/crypto v0.50.0
+	golang.org/x/crypto v0.53.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
-	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.43.0
-	golang.org/x/term v0.42.0
-	golang.org/x/text v0.36.0
-	golang.org/x/tools v0.44.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/sys v0.46.0
+	golang.org/x/term v0.44.0
+	golang.org/x/text v0.38.0
+	golang.org/x/tools v0.45.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
@@ -204,7 +204,7 @@ require (
 	github.com/gammazero/chanqueue v1.1.2 // indirect
 	github.com/gammazero/deque v1.2.1 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
-	github.com/gdamore/tcell/v2 v2.13.8 // indirect
+	github.com/gdamore/tcell/v2 v2.13.9 // indirect
 	github.com/georgysavva/scany/v2 v2.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -278,9 +278,9 @@ require (
 	github.com/magefile/mage v1.17.1 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
-	github.com/mattn/go-sqlite3 v1.14.42 // indirect
+	github.com/mattn/go-sqlite3 v1.14.44 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
 	github.com/mikioh/tcpopt v0.0.0-20190314235656-172688c1accc // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
@@ -316,7 +316,7 @@ require (
 	github.com/pion/turn/v4 v4.1.4 // indirect
 	github.com/pion/webrtc/v4 v4.2.11 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/polydawn/refmt v0.89.1-0.20231129105047-37766d95467a // indirect
+	github.com/polydawn/refmt v0.90.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
@@ -361,7 +361,7 @@ require (
 	go.dedis.ch/kyber/v4 v4.0.0-pre2.0.20240924132404-4de33740016e // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
-	go.opentelemetry.io/otel/bridge/opencensus v1.40.0 // indirect
+	go.opentelemetry.io/otel/bridge/opencensus v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/jaeger v1.14.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.64.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
@@ -375,8 +375,8 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260508192327-42602be52be6 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
@@ -389,7 +389,9 @@ require (
 
 require (
 	github.com/curiostorage/shouldtest v0.0.0-20260522222211-a06c87260eb5
-	golang.org/x/mod v0.35.0
+	golang.org/x/mod v0.36.0
 )
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
+
+replace github.com/filecoin-project/lotus => github.com/solopine/lotus v1.36.1-curio-1

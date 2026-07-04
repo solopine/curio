@@ -56,6 +56,8 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 			panic(err)
 		}
 
+		logger.Infow("devices found", "devices", devices)
+
 		gpuSlots := make([]byte, len(devices))
 		for i := range gpuSlots {
 			gpuSlots[i] = byte(resources.GpuOverprovisionFactor)
