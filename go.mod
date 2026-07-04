@@ -394,4 +394,4 @@ require (
 
 replace github.com/filecoin-project/filecoin-ffi => ./extern/filecoin-ffi
 
-replace github.com/filecoin-project/lotus => github.com/solopine/lotus v1.36.1-curio-1
+replace github.com/filecoin-project/lotus => github.com/solopine/lotus v1.36.0-curio-1
