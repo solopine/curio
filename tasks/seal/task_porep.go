@@ -83,6 +83,8 @@ func (p *PoRepTask) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwne
 	sectorParams := sectorParamsArr[0]
 	harmonytask.SetMeta(ctx, PoRepPipelineKey, [2]int64{sectorParams.SpID, sectorParams.SectorNumber})
 
+	log.Infow("task_porep", "sectorParams", sectorParams)
+
 	sealed, err := cid.Parse(sectorParams.SealedCID)
 	if err != nil {
 		return false, xerrors.Errorf("failed to parse sealed cid: %w", err)

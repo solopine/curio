@@ -307,7 +307,7 @@ func (dbi *DBIndex) StorageDetach(ctx context.Context, id storiface.ID, url stri
 }
 
 func (dbi *DBIndex) StorageReportHealth(ctx context.Context, id storiface.ID, report storiface.HealthReport) error {
-	retryWait := time.Millisecond * 20
+	retryWait := time.Millisecond * 500
 retryReportHealth:
 	_, err := dbi.harmonyDB.Exec(ctx,
 		"UPDATE storage_path set capacity=$1, available=$2, fs_available=$3, reserved=$4, used=$5, last_heartbeat=NOW() where storage_id=$6",
@@ -318,8 +318,18 @@ retryReportHealth:
 		report.Stat.Used,
 		id)
 	if err != nil {
+		log.Errorw("StorageReportHealth.update db", "report.Stat.Capacity", report.Stat.Capacity,
+			"report.Stat.Available", report.Stat.Available,
+			"report.Stat.FSAvailable", report.Stat.FSAvailable,
+			"report.Stat.Reserved", report.Stat.Reserved,
+			"report.Stat.Used", report.Stat.Used,
+			"report.Stat.id", id,
+			"err", err)
 		//return xerrors.Errorf("updating storage health in DB fails with err: %w", err)
 		if harmonydb.IsErrSerialization(err) {
+			log.Errorf("StorageReportHealth.update db.sleep",
+				"report.Stat.id", id,
+				"retryWait", retryWait)
 			time.Sleep(retryWait)
 			retryWait *= 2
 			goto retryReportHealth
@@ -853,6 +863,8 @@ func (dbi *DBIndex) StorageBestAlloc(ctx context.Context, allocate storiface.Sec
 	if err != nil {
 		return nil, xerrors.Errorf("estimating required space: %w", err)
 	}
+
+	log.Infow("StorageBestAlloc", "allocate", allocate, "pathType", pathType, "miner", miner, "spaceReq", spaceReq)
 
 	var rows []struct {
 		StorageId   string

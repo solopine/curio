@@ -89,10 +89,12 @@ func (s *SDRTask) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwned 
 	sectorParams := sectorParamsArr[0]
 	harmonytask.SetMeta(ctx, PoRepPipelineKey, [2]int64{sectorParams.SpID, sectorParams.SectorNumber})
 
+	log.Infow("----SDRTask.DO before DealDataSDRPoRep", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 	dealData, err := dealdata.DealDataSDRPoRep(ctx, s.db, s.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)
 	}
+	log.Infow("----SDRTask.DO after DealDataSDRPoRep", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber, "PieceInfos", dealData.PieceInfos)
 
 	sref := storiface.SectorRef{
 		ID: abi.SectorID{
@@ -108,12 +110,15 @@ func (s *SDRTask) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwned 
 		return false, xerrors.Errorf("getting miner address: %w", err)
 	}
 
+	log.Infow("----SDRTask.DO before GetTicket", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 	// FAIL: api may be down
 	// FAIL-RESP: rely on harmony retry
 	ticket, ticketEpoch, err := GetTicket(ctx, s.api, maddr)
 	if err != nil {
 		return false, xerrors.Errorf("getting ticket: %w", err)
 	}
+
+	log.Infow("----SDRTask.DO after GetTicket", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber, "ticket", ticket)
 
 	// do the SDR!!
 
@@ -125,10 +130,12 @@ func (s *SDRTask) Do(ctx context.Context, taskID harmonytask.TaskID, stillOwned 
 	//                Trees; After one retry, it should return the sector to the
 	// 			      SDR stage; max number of retries should be configurable
 
+	log.Infow("----SDRTask.DO before GenerateSDR", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 	err = s.sc.GenerateSDR(ctx, taskID, storiface.FTCache, sref, ticket, dealData.CommD)
 	if err != nil {
 		return false, xerrors.Errorf("generating sdr: %w", err)
 	}
+	log.Infow("----SDRTask.DO after GenerateSDR", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 
 	// store success!
 	n, err := s.db.Exec(ctx, `UPDATE sectors_sdr_pipeline

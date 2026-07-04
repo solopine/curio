@@ -205,6 +205,7 @@ func (h *taskTypeHandler) considerWork(from string, tasks []task, eventEmitter e
 		for _, tID := range tIDs {
 			markComplete, err := h.Cost.Claim(int(tID))
 			if err != nil {
+				log.Infow("h.Cost.Claim return err", "tID", tID, "err", err)
 				failedTIDs = append(failedTIDs, tID)
 				h.storageFailures[tID] = time.Now()
 				continue

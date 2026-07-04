@@ -531,6 +531,8 @@ func (m *MK12) processDeal(ctx context.Context, deal *ProviderDealState) (*Provi
 		}, nil
 	}
 
+	log.Infow("---processDeal", "deal", deal)
+
 	comm, err := m.db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
 		// First check if we already have deals with the proposal CID (duplicates can happen from boost deals)
 		var exist int

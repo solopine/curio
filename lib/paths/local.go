@@ -148,11 +148,14 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	accountExistingFiles := func(id abi.SectorID, fileType storiface.SectorFileType, overhead int64) (int64, error) {
 		sp := p.sectorPath(id, fileType)
 
+		//log.Infow("----accountExistingFiles.1", "path", sp)
 		used, err := ls.DiskUsage(sp)
 		if err == os.ErrNotExist {
+			//log.Infow("----accountExistingFiles.2", "path", sp+storiface.TempSuffix)
 			used, err = ls.DiskUsage(sp + storiface.TempSuffix)
 			if err == os.ErrNotExist {
 				p, ferr := tempFetchDest(sp, false)
+				//log.Infow("----accountExistingFiles.3", "path", p, "ferr", ferr)
 				if ferr != nil {
 					return 0, ferr
 				}
@@ -167,19 +170,24 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			if !os.IsNotExist(err) {
 				log.Warnf("getting disk usage of '%s': %+v", p.sectorPath(id, fileType), err)
 			}
+			//log.Infow("----getting disk usage err", p.sectorPath(id, fileType), err)
 			return 0, nil
 		}
 
-		log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
+		//log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
 		return used, nil
 	}
 
+	//log.Infow("----stat.before", "p", p.Local, "stat", stat)
 	for id, oh := range p.Reservations {
 		rid := ft(id)
 		onDisk, err := accountExistingFiles(rid.sid, rid.ft, oh)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
+
+		//log.Infow("----stat.accountExistingFiles", "p", p.Local, "sid", rid.sid, "ft", rid.ft, "oh", oh, "onDisk", onDisk, "stat.Reserved", stat.Reserved)
+
 		if onDisk > oh {
 			log.Warnw("reserved space on disk is greater than expected", "id", rid.sid, "fileType", rid.ft, "onDisk", onDisk, "oh", oh)
 			onDisk = oh
@@ -187,9 +195,11 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 
 		stat.Reserved -= onDisk
 	}
+	//log.Infow("----stat.after", "p", p.Local, "stat", stat)
+
 	for _, reservation := range newReserve {
 		for _, fileType := range reservation.ft.AllSet() {
-			log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
+			//log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
 
 			resID := sectorFile{reservation.id, fileType}
 
@@ -220,12 +230,15 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	if stat.Available < 0 {
 		stat.Available = 0
 	}
+	//log.Infow("----stat.after2", "p", p.Local, "stat", stat)
 
 	if p.MaxStorage > 0 {
 		used, err := ls.DiskUsage(p.Local)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
+
+		//log.Infow("----stat.DiskUsage", "p", p.Local, "used", used)
 
 		stat.Max = int64(p.MaxStorage)
 		stat.Used = used
@@ -239,6 +252,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			stat.Available = avail
 		}
 	}
+	//log.Infow("----stat.after3", "p", p.Local, "stat", stat)
 
 	if time.Since(start) > 5*time.Second {
 		log.Warnw("slow storage stat", "took", time.Since(start), "reservations", len(p.Reservations))
@@ -768,6 +782,8 @@ func (st *Local) reportStorage(ctx context.Context) {
 			r.Err = err.Error()
 		}
 
+		//log.Infow("----reportStorage", "path_id", id, "path", p, "r", r)
+
 		toReport[id] = r
 	}
 
@@ -815,6 +831,8 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			return nil, xerrors.Errorf("getting local storage stat: %w", err)
 		}
 
+		log.Infow("reserve stat", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "resvOnDisk", resvOnDisk, "stat", stat)
+
 		if overhead-resvOnDisk < 0 {
 			log.Errorw("negative overhead vs on-disk data", "overhead", overhead, "on-disk", resvOnDisk, "id", id, "sector", sid, "fileType", fileType)
 			resvOnDisk = overhead
@@ -830,13 +848,13 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 		freePercentag := (float64(availableAfter) / float64(MaxCapacity(stat))) * 100.0
 
 		if freePercentag < minFreePercentage {
-			log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
+			log.Infow("reserve add freePercentag low", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
 			return nil, storiface.Err(storiface.ErrTempAllocateSpace, xerrors.Errorf("can't reserve %d bytes in '%s' (id:%s), free disk percentage %f will be lower than minimum %f", overhead, p.Local, id, freePercentag, minFreePercentage))
 		}
 
 		resID := sectorFile{sid.ID, fileType}
 
-		log.Debugw("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
+		log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag, "minFreePercentage", minFreePercentage)
 
 		p.Reserved += overhead
 		p.Reservations[resID.String()] = overhead
@@ -846,7 +864,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			old_r()
 			st.localLk.Lock()
 			defer st.localLk.Unlock()
-			log.Debugw("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved-overhead)
+			log.Infow("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved-overhead)
 			p.Reserved -= overhead
 			delete(p.Reservations, resID.String())
 		}
