@@ -72,6 +72,7 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 		for { // distribute loop
 			select {
 			case ordinal := <-d.releaseChan:
+				logger.Infow("d.releaseChan", "ordinal", ordinal, "gpuSlots", gpuSlots)
 				if ordinal < 0 || ordinal >= len(gpuSlots) {
 					logger.Errorf("release of invalid GPU ordinal %d (have %d GPUs), ignoring", ordinal, len(gpuSlots))
 					continue
@@ -87,6 +88,7 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 					gpuSlots[ordinal]++
 				}
 			case acquireChan := <-d.acquireChan:
+				logger.Infow("d.acquireChan", "gpuSlots", gpuSlots)
 				max, maxIdx := byte(0), 0
 				for i, w := range gpuSlots { // find the least used GPU
 					if w > max {
@@ -98,6 +100,7 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 					continue
 				}
 				gpuSlots[maxIdx]--
+				logger.Infow("d.acquireChan2", "gpuSlots", gpuSlots)
 				acquireChan <- maxIdx
 			}
 		}
@@ -189,6 +192,8 @@ func call(ctx context.Context, body []byte) (io.ReadCloser, error) {
 	cmd.ExtraFiles = []*os.File{outFile}
 
 	cmd.Stdin = bytes.NewReader(body)
+
+	logger.Infow("executing command", "GPU dOrdinal", dOrdinal, "cmd.Args", cmd.Args, "cmd.Env", cmd.Env, "cmd.Path", cmd.Path, "cmd.Dir", cmd.Dir)
 	err = cmd.Run()
 	if err != nil {
 		_ = outFile.Close()
