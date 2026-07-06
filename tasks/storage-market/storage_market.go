@@ -354,7 +354,25 @@ func (d *CurioStorageDealMarket) processMk12Deal(ctx context.Context, deal MK12P
 				if err != nil {
 					return xerrors.Errorf("failed to ParseTxPiece for deal %s: %w", deal.UUID, err)
 				}
-				log.Infow("----ParseTxPiece successfully", "deal.UUID", deal.UUID, "txPiece", txPiece)
+
+				_, err = d.db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
+					_, err = tx.Exec(`UPDATE market_mk12_deal_pipeline SET raw_size = $3, started = TRUE 
+                           WHERE uuid = $4 AND started = FALSE`, txPiece.CarSize, deal)
+					if err != nil {
+						return false, xerrors.Errorf("store raw_size for piece %s: updating pipeline: %w", deal.PieceCid, err)
+					}
+
+					_, err = tx.Exec(`UPDATE market_direct_deals SET raw_size = $1 WHERE uuid = $2`, txPiece.CarSize, deal)
+					if err != nil {
+						return false, xerrors.Errorf("store raw_size for piece %s: updating direct deals: %w", deal.PieceCid, err)
+					}
+
+					return true, nil
+				}, harmonydb.OptionRetry())
+				if err != nil {
+					return xerrors.Errorf("deal %s: %w", deal, err)
+				}
+				log.Infow("----ParseTxPiece and start successfully", "deal.UUID", deal.UUID, "txPiece", txPiece)
 			}
 		} else {
 			// If no URL found for offline deal then we should try to find one
