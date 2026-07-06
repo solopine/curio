@@ -13,7 +13,7 @@ var log = logging.Logger("txcar")
 
 const TxHttpPort = 24001
 
-func ParseTxPiece(path string) (*txcar.TxPiece, error) {
+func ParseTxPieceFromUrlPath(path string) (*txcar.TxPiece, error) {
 	p, err := txcar.BoostPathParser.Parse(path)
 	return &p, err
 }
