@@ -357,12 +357,12 @@ func (d *CurioStorageDealMarket) processMk12Deal(ctx context.Context, deal MK12P
 
 				_, err = d.db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
 					_, err = tx.Exec(`UPDATE market_mk12_deal_pipeline SET raw_size = $3, started = TRUE 
-                           WHERE uuid = $4 AND started = FALSE`, txPiece.CarSize, deal)
+                           WHERE uuid = $4 AND started = FALSE`, txPiece.CarSize, deal.UUID)
 					if err != nil {
 						return false, xerrors.Errorf("store raw_size for piece %s: updating pipeline: %w", deal.PieceCid, err)
 					}
 
-					_, err = tx.Exec(`UPDATE market_direct_deals SET raw_size = $1 WHERE uuid = $2`, txPiece.CarSize, deal)
+					_, err = tx.Exec(`UPDATE market_direct_deals SET raw_size = $1 WHERE uuid = $2`, txPiece.CarSize, deal.UUID)
 					if err != nil {
 						return false, xerrors.Errorf("store raw_size for piece %s: updating direct deals: %w", deal.PieceCid, err)
 					}
