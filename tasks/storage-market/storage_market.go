@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	txcarlib "github.com/filecoin-project/curio/txcar"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/yugabyte/pgx/v5"
@@ -346,6 +347,13 @@ func (d *CurioStorageDealMarket) processMk12Deal(ctx context.Context, deal MK12P
 					}
 					log.Infof("UUID: %s deal started successfully", deal.UUID)
 				}
+			} else if goUrl.Scheme == "txcar" {
+				log.Infow("----ParseTxPiece", "deal.UUID", deal.UUID, "goUrl", goUrl)
+				txPiece, err := txcarlib.ParseTxPiece(goUrl.Path)
+				if err != nil {
+					return xerrors.Errorf("failed to ParseTxPiece for deal %s: %w", deal.UUID, err)
+				}
+				log.Infow("----ParseTxPiece successfully", "deal.UUID", deal.UUID, "txPiece", txPiece)
 			}
 		} else {
 			// If no URL found for offline deal then we should try to find one
@@ -508,7 +516,6 @@ type MarketMK12Deal struct {
 
 func (d *CurioStorageDealMarket) findURLForOfflineDeals(ctx context.Context, deal string, pcid string) error {
 
-	log.Infow("---findURLForOfflineDeals", "deal", deal, "pcid", pcid)
 	_, err := d.db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
 		var updated bool
 		err = tx.QueryRow(`

@@ -3,6 +3,7 @@ module github.com/filecoin-project/curio
 go 1.26
 
 require (
+	github.com/solopine/txcar v0.31.0
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/CAFxX/httpcompression v0.0.9
