@@ -508,6 +508,7 @@ type MarketMK12Deal struct {
 
 func (d *CurioStorageDealMarket) findURLForOfflineDeals(ctx context.Context, deal string, pcid string) error {
 
+	log.Infow("---findURLForOfflineDeals", "deal", deal, "pcid", pcid)
 	_, err := d.db.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
 		var updated bool
 		err = tx.QueryRow(`
