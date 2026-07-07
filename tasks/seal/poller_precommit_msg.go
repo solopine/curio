@@ -78,7 +78,7 @@ func (s *SealPoller) pollStartBatchPrecommitMsg(ctx context.Context) {
 			return false, xerrors.Errorf("getting precommit batch candidates: %w", err)
 		}
 
-		log.Infow("----pollStartBatchPrecommitMsg", "rows", rows)
+		log.Infow("----pollStartBatchPrecommitMsg", "maxBatch", maxBatch, "timeout", timeout, "rows", rows)
 
 		if len(rows) == 0 {
 			return false, nil
