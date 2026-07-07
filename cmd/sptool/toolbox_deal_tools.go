@@ -877,7 +877,7 @@ func printAllocation(allocations map[verifreg.AllocationId]verifreg.Allocation, 
 			tablewriter.Col(pieceSize),
 			tablewriter.Col(tMin),
 			tablewriter.Col(tMax),
-			tablewriter.NewLineCol(expr))
+			tablewriter.Col(expr))
 		// populate it with content
 		for _, alloc := range allocs {
 			tw.Write(alloc)
