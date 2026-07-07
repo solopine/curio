@@ -107,12 +107,15 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 		return false, xerrors.Errorf("getting miner address: %w", err)
 	}
 
+	log.Infow("----SDRTask.DO before GetTicket", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 	// FAIL: api may be down
 	// FAIL-RESP: rely on harmony retry
 	ticket, ticketEpoch, err := GetTicket(ctx, s.api, maddr)
 	if err != nil {
 		return false, xerrors.Errorf("getting ticket: %w", err)
 	}
+
+	log.Infow("----SDRTask.DO after GetTicket", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber, "ticket", ticket)
 
 	// do the SDR!!
 

@@ -385,6 +385,10 @@ var ddoCmd = &cli.Command{
 			Name:  "start-epoch",
 			Usage: translations.T("start epoch by when the deal should be proved by provider on-chain (default: 2 days from now)"),
 		},
+		&cli.StringFlag{
+			Name:     "tx-url",
+			Required: false,
+		},
 	},
 	Action: func(cctx *cli.Context) error {
 		if cctx.Args().Len() < 2 {
@@ -469,6 +473,8 @@ var ddoCmd = &cli.Command{
 		fastRetrieval := !cctx.Bool("remove-unsealed-copy")
 		announce := !cctx.Bool("skip-ipni-announce")
 
+		txUrl := cctx.String("tx-url")
+
 		// Add the deal to DB
 		comm, err := dep.DB.BeginTransaction(ctx, func(tx *harmonydb.Tx) (commit bool, err error) {
 			_, err = tx.Exec(`INSERT INTO market_direct_deals (
@@ -487,9 +493,9 @@ var ddoCmd = &cli.Command{
 			}
 
 			// Insert the offline deal into the deal pipeline
-			_, err = tx.Exec(`INSERT INTO market_mk12_deal_pipeline (uuid, sp_id, piece_cid, piece_size, offline, should_index, announce, is_ddo)
-								VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (uuid) DO NOTHING`,
-				id, actID, alloc.Data.String(), alloc.Size, true, fastRetrieval, announce, true)
+			_, err = tx.Exec(`INSERT INTO market_mk12_deal_pipeline (uuid, sp_id, piece_cid, piece_size, offline, should_index, announce, is_ddo, url)
+								VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (uuid) DO NOTHING`,
+				id, actID, alloc.Data.String(), alloc.Size, true, fastRetrieval, announce, true, txUrl)
 			if err != nil {
 				return false, xerrors.Errorf("inserting direct deal into deal pipeline: %w", err)
 			}

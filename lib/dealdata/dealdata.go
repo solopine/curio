@@ -142,6 +142,8 @@ func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, s
 		}
 	}()
 
+	log.Infow("----getDealMetadata.0", "pieces", pieces)
+
 	if len(pieces) > 0 {
 		var pieceInfos []abi.PieceInfo
 		var pieceReaders []io.Reader
