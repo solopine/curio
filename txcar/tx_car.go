@@ -29,11 +29,9 @@ func getCarFilePathInPiece(spId, sectorNumber int64) string {
 // return car file path
 func CreateCarFileInPiece(ctx context.Context, txPiece *txcar.TxPiece, spId, sectorNumber int64) (string, error) {
 	dest := getCarFilePathInPiece(spId, sectorNumber)
-	err := os.Remove(dest)
-	if err != nil {
-		return "", err
-	}
-	err = txcar.CreateCarFileWithTxPieceWithDest(ctx, *txPiece, dest)
+	_ = os.Remove(dest)
+
+	err := txcar.CreateCarFileWithTxPieceWithDest(ctx, *txPiece, dest)
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +41,7 @@ func CreateCarFileInPiece(ctx context.Context, txPiece *txcar.TxPiece, spId, sec
 func RemoveCarFileInPiece(spId, sectorNumber int64) {
 	dest := getCarFilePathInPiece(spId, sectorNumber)
 	log.Infow("Removing car file in piece", "dest", dest)
-	os.Remove(dest)
+	_ = os.Remove(dest)
 }
 
 func GetCarFileReaderInPiece(spId, sectorNumber int64) (io.ReadCloser, error) {
