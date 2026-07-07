@@ -99,7 +99,7 @@ require (
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/snadrus/must v0.0.0-20250604233757-70ccf00931c3
-	github.com/solopine/txcar v0.31.1
+	github.com/solopine/txcar v0.31.2
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6

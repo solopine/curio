@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 
+	txcarlib "github.com/filecoin-project/curio/txcar"
 	"github.com/ipfs/go-cid"
 	logging "github.com/ipfs/go-log/v2"
 	"golang.org/x/xerrors"
@@ -50,6 +51,56 @@ type DealData struct {
 	Close        func()
 }
 
+func CreateTxCarInPiece(ctx context.Context, db *harmonydb.DB, spId, sectorNumber int64, spt abi.RegisteredSealProof) (string, error) {
+	var pieces []dealMetadata
+	err := db.Select(ctx, &pieces, `
+		SELECT piece_index, piece_cid, piece_size, data_url, data_headers, data_raw_size, data_delete_on_finalize
+		FROM sectors_sdr_initial_pieces
+		WHERE sp_id = $1 AND sector_number = $2 ORDER BY piece_index ASC`, spId, sectorNumber)
+	if err != nil {
+		return "", xerrors.Errorf("getting pieces: %w", err)
+	}
+
+	if len(pieces) != 1 {
+		return "", nil
+	}
+	p := pieces[0]
+	if !p.DataUrl.Valid || p.DataUrl.String == "" {
+		return "", nil
+	}
+
+	dataUrl := p.DataUrl.String
+	goUrl, err := url.Parse(dataUrl)
+	if err != nil {
+		return "", xerrors.Errorf("parsing data URL: %w", err)
+	}
+
+	if goUrl.Scheme != "txcar" {
+		return "", nil
+	}
+
+	ssize, err := spt.SectorSize()
+	if err != nil {
+		return "", xerrors.Errorf("getting sector size: %w", err)
+	}
+
+	if p.PieceSize != int64(ssize) {
+		return "", xerrors.Errorf("p.PieceSize (%d) != ssize(%d)", p.PieceSize, ssize)
+	}
+
+	txPiece, err := txcarlib.ParseTxPieceFromUrlPath(goUrl.Path)
+	if err != nil {
+		return "", xerrors.Errorf("ParseTxPieceFromUrlPath: %w", err)
+	}
+
+	car, err := txcarlib.CreateCarFileInPiece(ctx, txPiece, spId, sectorNumber)
+	if err != nil {
+		return "", xerrors.Errorf("CreateCarFileInPiece: %w", err)
+	}
+
+	return car, nil
+}
+
 func DealDataSDRPoRep(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, spId, sectorNumber int64, spt abi.RegisteredSealProof, commDOnly bool) (*DealData, error) {
 	var pieces []dealMetadata
 	err := db.Select(ctx, &pieces, `
@@ -60,7 +111,7 @@ func DealDataSDRPoRep(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, 
 		return nil, xerrors.Errorf("getting pieces: %w", err)
 	}
 
-	return getDealMetadata(ctx, db, sc, spt, pieces, commDOnly)
+	return getDealMetadata(ctx, db, sc, spt, pieces, commDOnly, spId, sectorNumber)
 }
 
 func DealDataSnap(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, spId, sectorNumber int64, spt abi.RegisteredSealProof) (*DealData, error) {
@@ -73,7 +124,7 @@ func DealDataSnap(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, spId
 		return nil, xerrors.Errorf("getting pieces: %w", err)
 	}
 
-	return getDealMetadata(ctx, db, sc, spt, pieces, false)
+	return getDealMetadata(ctx, db, sc, spt, pieces, false, spId, sectorNumber)
 }
 
 func UnsealedCidFromPieces(ctx context.Context, db *harmonydb.DB, spId, sectorNumber int64) (cid.Cid, error) {
@@ -113,7 +164,7 @@ func UnsealedCidFromPieces(ctx context.Context, db *harmonydb.DB, spId, sectorNu
 		})
 	}
 
-	dd, err := getDealMetadata(ctx, db, nil, abi.RegisteredSealProof(sectorParams[0].RegSealProof), dms, true)
+	dd, err := getDealMetadata(ctx, db, nil, abi.RegisteredSealProof(sectorParams[0].RegSealProof), dms, true, spId, sectorNumber)
 	if err != nil {
 		return cid.Undef, xerrors.Errorf("getting deal metadata: %w", err)
 	}
@@ -121,7 +172,7 @@ func UnsealedCidFromPieces(ctx context.Context, db *harmonydb.DB, spId, sectorNu
 	return dd.CommD, nil
 }
 
-func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, spt abi.RegisteredSealProof, pieces []dealMetadata, commDOnly bool) (*DealData, error) {
+func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, spt abi.RegisteredSealProof, pieces []dealMetadata, commDOnly bool, spId, sectorNumber int64) (*DealData, error) {
 	ssize, err := spt.SectorSize()
 	if err != nil {
 		return nil, xerrors.Errorf("getting sector size: %w", err)
@@ -221,6 +272,21 @@ func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, s
 							return nil, xerrors.Errorf("getting piece reader: %w", err)
 						}
 
+						closers = append(closers, pr)
+
+						reader, _ := padreader.New(pr, uint64(p.DataRawSize.Int64))
+						pieceReaders = append(pieceReaders, reader)
+					} else if goUrl.Scheme == "txcar" {
+						txPiece, err := txcarlib.ParseTxPieceFromUrlPath(goUrl.Path)
+						if err != nil {
+							return nil, xerrors.Errorf("ParseTxPieceFromUrlPath: %w", err)
+						}
+						log.Infow("----getDealMetadata.txcar", "goUrl", goUrl, "p", p, "txPiece", txPiece)
+
+						pr, err := txcarlib.GetCarFileReaderInPiece(spId, sectorNumber)
+						if err != nil {
+							return nil, xerrors.Errorf("getting piece reader: %w", err)
+						}
 						closers = append(closers, pr)
 
 						reader, _ := padreader.New(pr, uint64(p.DataRawSize.Int64))

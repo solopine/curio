@@ -348,9 +348,8 @@ func (d *CurioStorageDealMarket) processMk12Deal(ctx context.Context, deal MK12P
 					log.Infof("UUID: %s deal started successfully", deal.UUID)
 				}
 			} else if goUrl.Scheme == "txcar" {
-				txUrlPath := strings.TrimPrefix(goUrl.Path, "/")
-				log.Infow("----ParseTxPiece", "deal.UUID", deal.UUID, "goUrl", goUrl, "txUrlPath", txUrlPath)
-				txPiece, err := txcarlib.ParseTxPieceFromUrlPath(txUrlPath)
+				log.Infow("----ParseTxPiece", "deal.UUID", deal.UUID, "goUrl", goUrl, "goUrl.Path", goUrl.Path)
+				txPiece, err := txcarlib.ParseTxPieceFromUrlPath(goUrl.Path)
 				if err != nil {
 					return xerrors.Errorf("failed to ParseTxPiece for deal %s: %w", deal.UUID, err)
 				}

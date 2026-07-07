@@ -3,6 +3,7 @@ package seal
 import (
 	"context"
 
+	txcarlib "github.com/filecoin-project/curio/txcar"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/tag"
 	"golang.org/x/xerrors"
@@ -171,6 +172,15 @@ func (t *TreeDTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 		},
 		ProofType: sectorParams.RegSealProof,
 	}
+
+	// CreateTxCarInPiece
+	_, err = dealdata.CreateTxCarInPiece(ctx, t.db, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof)
+	if err != nil {
+		return false, xerrors.Errorf("failed to CreateTxCarInPiece: %w", err)
+	}
+	defer func() {
+		txcarlib.RemoveCarFileInPiece(sectorParams.SpID, sectorParams.SectorNumber)
+	}()
 
 	// Fetch the Sector to local storage
 	fsPaths, pathIds, release, err := t.sc.PreFetch(ctx, sref, &taskID)

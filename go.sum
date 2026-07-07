@@ -1279,8 +1279,8 @@ github.com/snadrus/must v0.0.0-20250604233757-70ccf00931c3 h1:pTpNcvkTk149MV1hBs
 github.com/snadrus/must v0.0.0-20250604233757-70ccf00931c3/go.mod h1:EVUCdAlh++SE2/i7nUR6IWDVd5oqmU0VOqRx50p4zFE=
 github.com/solopine/lotus v1.36.0-curio-1 h1:TjlkajCUi2RgYzdRfK5i/3q/am24vwhd73GxAaWlsl8=
 github.com/solopine/lotus v1.36.0-curio-1/go.mod h1:tzFOxSSszbfgocCRMsAraa9C3Jj3iEIEiOY9Pf9CsmY=
-github.com/solopine/txcar v0.31.1 h1:Q93sxydxG6rvZXTkiJA3uGxAsiJx9fJl6h5B/e+gMhw=
-github.com/solopine/txcar v0.31.1/go.mod h1:Mrj/rkzjx/mHbqDMlidN1NLvyspUUw5g/DNiyluoA/c=
+github.com/solopine/txcar v0.31.2 h1:sycNWMARuyhCPcmxnUQIMRwNI7Ax7xfz64ILKAKSYZM=
+github.com/solopine/txcar v0.31.2/go.mod h1:Mrj/rkzjx/mHbqDMlidN1NLvyspUUw5g/DNiyluoA/c=
 github.com/spacemonkeygo/openssl v0.0.0-20181017203307-c2dcc5cca94a/go.mod h1:7AyxJNCJ7SBZ1MfVQCWD6Uqo2oubI2Eq2y2eqf+A5r0=
 github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572/go.mod h1:w0SWMsp6j9O/dk4/ZpIhL+3CkG8ofA2vuv7k+ltqUMc=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
