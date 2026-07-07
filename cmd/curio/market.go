@@ -440,8 +440,9 @@ var ddoCmd = &cli.Command{
 
 		// Set Default if not specified by the user
 		if startEpoch == 0 {
-			startEpoch = head.Height() + (builtin.EpochsInDay * 2)
+			startEpoch = builtin.EpochsInDay * 2
 		}
+		startEpoch = head.Height() + startEpoch
 
 		alloc, err := dep.Chain.StateGetAllocation(ctx, client, verifreg.AllocationId(allocationId), head.Key())
 		if err != nil {
