@@ -86,10 +86,12 @@ func (s *SDRTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done bo
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("----SDRTask.DO before DealDataSDRPoRep", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber)
 	dealData, err := dealdata.DealDataSDRPoRep(ctx, s.db, s.sc, sectorParams.SpID, sectorParams.SectorNumber, sectorParams.RegSealProof, true)
 	if err != nil {
 		return false, xerrors.Errorf("getting deal data: %w", err)
 	}
+	log.Infow("----SDRTask.DO after DealDataSDRPoRep", "SpID", sectorParams.SpID, "sectorParams.SectorNumber", sectorParams.SectorNumber, "PieceInfos", dealData.PieceInfos)
 
 	sref := storiface.SectorRef{
 		ID: abi.SectorID{

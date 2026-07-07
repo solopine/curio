@@ -191,6 +191,8 @@ func getDealMetadata(ctx context.Context, db *harmonydb.DB, sc *ffi.SealCalls, s
 						hdrs = http.Header{}
 					}
 
+					log.Infow("----getDealMetadata", "goUrl", goUrl, "p", p)
+
 					if goUrl.Scheme == "pieceref" {
 						// url is to a piece reference
 
