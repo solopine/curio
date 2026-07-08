@@ -83,6 +83,8 @@ func (p *PoRepTask) Do(taskID harmonytask.TaskID, stillOwned func() bool) (done 
 	}
 	sectorParams := sectorParamsArr[0]
 
+	log.Infow("task_porep", "sectorParams", sectorParams)
+
 	sealed, err := cid.Parse(sectorParams.SealedCID)
 	if err != nil {
 		return false, xerrors.Errorf("failed to parse sealed cid: %w", err)
