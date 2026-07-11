@@ -177,12 +177,16 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 		return used, nil
 	}
 
+	log.Infow("----stat.before", "p", p.Local, "stat", stat)
 	for id, oh := range p.Reservations {
 		rid := ft(id)
 		onDisk, err := accountExistingFiles(rid.sid, rid.ft, oh)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
+
+		log.Infow("----stat.accountExistingFiles", "p", p.Local, "sid", rid.sid, "ft", rid.ft, "oh", oh, "onDisk", onDisk, "stat.Reserved", stat.Reserved)
+
 		if onDisk > oh {
 			log.Warnw("reserved space on disk is greater than expected", "id", rid.sid, "fileType", rid.ft, "onDisk", onDisk, "oh", oh)
 			onDisk = oh
@@ -190,6 +194,8 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 
 		stat.Reserved -= onDisk
 	}
+	log.Infow("----stat.after", "p", p.Local, "stat", stat)
+
 	for _, reservation := range newReserve {
 		for _, fileType := range reservation.ft.AllSet() {
 			log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
@@ -223,12 +229,15 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	if stat.Available < 0 {
 		stat.Available = 0
 	}
+	log.Infow("----stat.after2", "p", p.Local, "stat", stat)
 
 	if p.MaxStorage > 0 {
 		used, err := ls.DiskUsage(p.Local)
 		if err != nil {
 			return fsutil.FsStat{}, 0, err
 		}
+
+		log.Infow("----stat.DiskUsage", "p", p.Local, "used", used)
 
 		stat.Max = int64(p.MaxStorage)
 		stat.Used = used
@@ -242,6 +251,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			stat.Available = avail
 		}
 	}
+	log.Infow("----stat.after3", "p", p.Local, "stat", stat)
 
 	if time.Since(start) > 5*time.Second {
 		log.Warnw("slow storage stat", "took", time.Since(start), "reservations", len(p.Reservations))
@@ -655,6 +665,8 @@ func (st *Local) reportStorage(ctx context.Context) {
 		if err != nil {
 			r.Err = err.Error()
 		}
+
+		log.Infow("----reportStorage", "path_id", id, "path", p, "r", r)
 
 		toReport[id] = r
 	}

@@ -845,6 +845,8 @@ func (dbi *DBIndex) StorageBestAlloc(ctx context.Context, allocate storiface.Sec
 		return nil, xerrors.Errorf("estimating required space: %w", err)
 	}
 
+	log.Infow("StorageBestAlloc", "allocate", allocate, "pathType", pathType, "miner", miner, "spaceReq", spaceReq)
+
 	var rows []struct {
 		StorageId   string
 		Urls        string

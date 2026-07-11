@@ -126,6 +126,8 @@ func (t *TaskStorage) HasCapacity() bool {
 		return true
 	}
 
+	log.Infow("HasCapacity. false", "paths", paths, "local", local, "TaskStorage.alloc", t.alloc, "TaskStorage.existing", t.existing, "pathType", t.pathType)
+
 	return false // no path found
 }
 
