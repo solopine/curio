@@ -703,6 +703,8 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			return nil, xerrors.Errorf("getting local storage stat: %w", err)
 		}
 
+		log.Infow("reserve stat", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "resvOnDisk", resvOnDisk, "stat", stat)
+
 		if overhead-resvOnDisk < 0 {
 			log.Errorw("negative overhead vs on-disk data", "overhead", overhead, "on-disk", resvOnDisk, "id", id, "sector", sid, "fileType", fileType)
 			resvOnDisk = overhead
@@ -718,13 +720,13 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 		freePercentag := (float64(availableAfter) / float64(MaxCapacity(stat))) * 100.0
 
 		if freePercentag < minFreePercentage {
-			log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
+			log.Infow("reserve add freePercentag low", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
 			return nil, storiface.Err(storiface.ErrTempAllocateSpace, xerrors.Errorf("can't reserve %d bytes in '%s' (id:%s), free disk percentage %f will be lower than minimum %f", overhead, p.Local, id, freePercentag, minFreePercentage))
 		}
 
 		resID := sectorFile{sid.ID, fileType}
 
-		log.Debugw("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag)
+		log.Infow("reserve add", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved+overhead, "freepct", freePercentag, "minFreePercentage", minFreePercentage)
 
 		p.Reserved += overhead
 		p.Reservations[resID.String()] = overhead
@@ -734,7 +736,7 @@ func (st *Local) Reserve(ctx context.Context, sid storiface.SectorRef, ft storif
 			old_r()
 			st.localLk.Lock()
 			defer st.localLk.Unlock()
-			log.Debugw("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved-overhead)
+			log.Infow("reserve release", "id", id, "sector", sid, "fileType", fileType, "overhead", overhead, "reserved-before", p.Reserved, "reserved-after", p.Reserved-overhead)
 			p.Reserved -= overhead
 			delete(p.Reservations, resID.String())
 		}

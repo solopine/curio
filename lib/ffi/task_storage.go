@@ -135,6 +135,7 @@ func (t *TaskStorage) Claim(taskID int) (func() error, error) {
 	// B: Create a reservation for existing files to be fetched into local storage
 	// C: Create a reservation for existing files in local storage which may be extended (e.g. sector cache when computing Trees)
 
+	log.Infow("claiming TaskStorage", "taskID", taskID, "TaskStorage.alloc", t.alloc, "TaskStorage.existing", t.existing, "pathType", t.pathType)
 	ctx := context.Background()
 
 	sectorRefs, err := t.taskToSectorRef(harmonytask.TaskID(taskID))
@@ -160,6 +161,7 @@ func (t *TaskStorage) Claim(taskID int) (func() error, error) {
 	}()
 
 	for _, sectorRef := range sectorRefs {
+		log.Infow("claiming StorageTryLock", "taskID", taskID, "sectorRef", sectorRef.ID())
 		ok, err := t.sc.Sectors.sindex.StorageTryLock(lkctx, sectorRef.ID(), storiface.FTNone, requestedTypes)
 		if err != nil {
 			// timer will expire
@@ -202,6 +204,8 @@ func (t *TaskStorage) Claim(taskID int) (func() error, error) {
 			return nil, err
 		}
 
+		log.Infow("claiming AcquireSector", "taskID", taskID, "sectorRef", sectorRef.ID(), "pathsFs", pathsFs, "pathIDs", pathIDs)
+
 		// reserve the space
 		release, err := t.sc.Sectors.localStore.Reserve(ctx, sectorRef.Ref(), requestedTypes, pathIDs, t.Overheads, t.MinFreeStoragePercentage)
 		if err != nil {
@@ -230,7 +234,7 @@ func (t *TaskStorage) Claim(taskID int) (func() error, error) {
 		}
 
 		resvs = append(resvs, sres)
-		log.Debugw("claimed storage", "task_id", taskID, "sector", sectorRef.ID(), "paths", pathsFs)
+		log.Infow("claimed storage", "task_id", taskID, "sector", sectorRef.ID(), "paths", pathsFs)
 	}
 
 	cleanup = func() {}

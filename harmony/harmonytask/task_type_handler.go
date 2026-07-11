@@ -191,6 +191,7 @@ func (h *taskTypeHandler) considerWork(from string, ids []TaskID) (workAccepted 
 		for _, tID := range tIDs {
 			markComplete, err := h.Cost.Claim(int(tID)) // Accepted tasks IDs are known now.
 			if err != nil {
+				log.Infow("h.Cost.Claim return err", "tID", tID, "err", err)
 				failedTIDs = append(failedTIDs, tID)
 				h.storageFailures[tID] = time.Now()
 				continue
