@@ -173,6 +173,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			if !os.IsNotExist(err) {
 				log.Warnf("getting disk usage of '%s': %+v", p.sectorPath(id, fileType), err)
 			}
+			log.Infow("----getting disk usage err", p.sectorPath(id, fileType), err)
 			return 0, nil
 		}
 
