@@ -6,6 +6,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/pkg/errors"
 
 	"github.com/filecoin-project/curio/lib/storiface"
 
@@ -79,6 +80,11 @@ func (c *cachedLocalStorage) Stat(path string) (fsutil.FsStat, error) {
 }
 
 func (c *cachedLocalStorage) DiskUsage(path string) (int64, error) {
+	_, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, err
+	}
+
 	c.statLk.Lock()
 	defer c.statLk.Unlock()
 
