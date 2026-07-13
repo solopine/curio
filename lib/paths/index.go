@@ -15,7 +15,7 @@ import (
 )
 
 var HeartbeatInterval = 10 * time.Second
-var SkippedHeartbeatThresh = HeartbeatInterval * 5
+var SkippedHeartbeatThresh = HeartbeatInterval * 50
 
 //go:generate go run github.com/golang/mock/mockgen -source=index.go -destination=mocks/index.go -package=mocks SectorIndex
 
