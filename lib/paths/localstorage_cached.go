@@ -82,7 +82,7 @@ func (c *cachedLocalStorage) Stat(path string) (fsutil.FsStat, error) {
 func (c *cachedLocalStorage) DiskUsage(path string) (int64, error) {
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return 0, err
+		return 0, os.ErrNotExist
 	}
 
 	c.statLk.Lock()
