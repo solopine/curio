@@ -202,7 +202,7 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 
 	for _, reservation := range newReserve {
 		for _, fileType := range reservation.ft.AllSet() {
-			log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
+			//log.Debugw("accounting existing files for new reservation", "id", reservation.id, "fileType", fileType, "overhead", reservation.overhead)
 
 			resID := sectorFile{reservation.id, fileType}
 
