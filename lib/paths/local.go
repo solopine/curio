@@ -151,14 +151,14 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 	accountExistingFiles := func(id abi.SectorID, fileType storiface.SectorFileType, overhead int64) (int64, error) {
 		sp := p.sectorPath(id, fileType)
 
-		log.Infow("----accountExistingFiles.1", "path", sp)
+		//log.Infow("----accountExistingFiles.1", "path", sp)
 		used, err := ls.DiskUsage(sp)
 		if err == os.ErrNotExist {
-			log.Infow("----accountExistingFiles.2", "path", sp+storiface.TempSuffix)
+			//log.Infow("----accountExistingFiles.2", "path", sp+storiface.TempSuffix)
 			used, err = ls.DiskUsage(sp + storiface.TempSuffix)
 			if err == os.ErrNotExist {
 				p, ferr := tempFetchDest(sp, false)
-				log.Infow("----accountExistingFiles.3", "path", p, "ferr", ferr)
+				//log.Infow("----accountExistingFiles.3", "path", p, "ferr", ferr)
 				if ferr != nil {
 					return 0, ferr
 				}
@@ -173,11 +173,11 @@ func (p *path) stat(ls LocalStorage, newReserve ...statExistingSectorForReservat
 			if !os.IsNotExist(err) {
 				log.Warnf("getting disk usage of '%s': %+v", p.sectorPath(id, fileType), err)
 			}
-			log.Infow("----getting disk usage err", p.sectorPath(id, fileType), err)
+			//log.Infow("----getting disk usage err", p.sectorPath(id, fileType), err)
 			return 0, nil
 		}
 
-		log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
+		//log.Debugw("accounting existing files", "id", id, "fileType", fileType, "path", sp, "used", used, "overhead", overhead)
 		return used, nil
 	}
 
@@ -670,7 +670,7 @@ func (st *Local) reportStorage(ctx context.Context) {
 			r.Err = err.Error()
 		}
 
-		log.Infow("----reportStorage", "path_id", id, "path", p, "r", r)
+		//log.Infow("----reportStorage", "path_id", id, "path", p, "r", r)
 
 		toReport[id] = r
 	}
