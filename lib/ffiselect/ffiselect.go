@@ -46,6 +46,7 @@ type deviceOrdinalManager struct {
 var deviceOrdinalMgr = newDeviceOrdinalManager(ffi.GetGPUDevices)
 
 func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdinalManager {
+	logger.Info("----newDeviceOrdinalManager start")
 	d := &deviceOrdinalManager{
 		releaseChan: make(chan int),
 		acquireChan: make(chan chan int),
@@ -88,7 +89,7 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 					gpuSlots[ordinal]++
 				}
 			case acquireChan := <-d.acquireChan:
-				logger.Infow("d.acquireChan", "gpuSlots", gpuSlots)
+				logger.Infow("d.acquireChan", "len(gpuSlots)", len(gpuSlots))
 				max, maxIdx := byte(0), 0
 				for i, w := range gpuSlots { // find the least used GPU
 					if w > max {
@@ -100,11 +101,12 @@ func newDeviceOrdinalManager(getGPUDevices func() ([]string, error)) *deviceOrdi
 					continue
 				}
 				gpuSlots[maxIdx]--
-				logger.Infow("d.acquireChan2", "gpuSlots", gpuSlots)
+				logger.Infow("d.acquireChan2", "maxIdx", maxIdx, "max", max)
 				acquireChan <- maxIdx
 			}
 		}
 	}()
+	logger.Info("----newDeviceOrdinalManager end")
 	return d
 }
 

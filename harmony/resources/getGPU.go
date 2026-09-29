@@ -34,7 +34,7 @@ func getGPUDevices() float64 { // GPU boolean
 	}
 
 	gpus, err := ffi.GetGPUDevices()
-	logger.Infow("GPUs", "list", gpus, "overprovision_factor", GpuOverprovisionFactor)
+	logger.Infow("GPUs", "list", gpus, "overprovision_factor", GpuOverprovisionFactor, "float64(len(gpus) * GpuOverprovisionFactor)", float64(len(gpus)*GpuOverprovisionFactor))
 	if err != nil {
 		logger.Errorf("getting gpu devices failed: %+v", err)
 	}
